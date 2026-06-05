@@ -26,8 +26,12 @@ find_system_python() {
 ensure_venv() {
   local system_python
   system_python="$(find_system_python)"
+  local venv_args=()
+  if [[ "${SCALER_USE_SYSTEM_SITE_PACKAGES:-0}" == "1" ]]; then
+    venv_args+=(--system-site-packages)
+  fi
   if [[ ! -d "$VENV_DIR" ]]; then
-    "$system_python" -m venv "$VENV_DIR"
+    "$system_python" -m venv "${venv_args[@]}" "$VENV_DIR"
   fi
   "$PYTHON_BIN" -m pip install --upgrade pip
   "$PIP_BIN" install -r "$ROOT_DIR/requirements.txt"
