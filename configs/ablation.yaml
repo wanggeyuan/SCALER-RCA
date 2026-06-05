@@ -1,0 +1,9 @@
+variants:
+  full: {}
+  no_semantic_alignment:
+    semantic_alignment_enabled: false
+  no_dynamic_fusion:
+    dynamic_fusion_enabled: false
+  no_curriculum_learning:
+    curriculum_enabled: false
+
