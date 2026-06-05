@@ -1,5 +1,7 @@
 # SCALER-RCA
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 Official repository for the ICWS paper `SCALER: LLM-based Cross-Modal Alignment for Microservice Root Cause Analysis`.
 
 This repository only keeps the code paths that map directly to the camera-ready paper:
@@ -29,13 +31,13 @@ Baseline re-implementations, paper drafts, plotting scratch files, and unrelated
 3. Train the main SCALER model:
 
 ```bash
-./run_scaler.sh train --data-root ./data/rcaeval --epochs 1
+./run_scaler.sh train --data-root ./data/rcaeval --epochs 10
 ```
 
 4. Run the ablations:
 
 ```bash
-./run_scaler.sh ablation --data-root ./data/rcaeval --epochs 1
+./run_scaler.sh ablation --data-root ./data/rcaeval --epochs 10
 ```
 
 5. Summarize results:
@@ -66,4 +68,10 @@ This release focuses on:
 - automatic result summarization aligned with the paper metrics
 
 It does not include baseline comparison code.
+
+## Notes
+
+- `outputs/` is for local run artifacts and is not committed to the repository.
+- `run_scaler.sh` creates and uses a local `.venv` automatically.
+- The default text anchor is a public Hugging Face model (`bert-base-uncased`), with a hashed fallback if transformer weights are unavailable.
 
