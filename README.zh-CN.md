@@ -16,10 +16,18 @@
 
 ## 快速开始
 
-1. 准备数据：
+1. 先准备数据。
+
+如果你本机已经有 RCAEval 数据：
 
 ```bash
 ./run_scaler.sh prepare-data --source-dir /path/to/RCAEval/data
+```
+
+如果你本机还没有 RCAEval 数据：
+
+```bash
+./download_rcaeval.sh --target-dir ./data/rcaeval
 ```
 
 2. 运行基础自检：
@@ -57,7 +65,21 @@ RCAEval 数据目录应满足以下结构：
   RE3/
 ```
 
-你可以直接把已有的 RCAEval 数据根目录传给脚本，也可以将其复制或软链接到 `data/rcaeval`。
+你可以通过两种方式准备数据：
+
+1. 复用你已有的 RCAEval 数据目录，并接入当前仓库：
+
+```bash
+./run_scaler.sh prepare-data --source-dir /path/to/RCAEval/data
+```
+
+2. 直接在当前仓库里下载官方 RCAEval 数据：
+
+```bash
+./download_rcaeval.sh --target-dir ./data/rcaeval
+```
+
+下载脚本使用的是与官方 RCAEval 项目一致的 RE1/RE2/RE3 Zenodo 数据链接。完整下载需要较长时间，并需要数 GB 以上磁盘空间。
 
 ## 仓库范围
 
@@ -74,4 +96,3 @@ RCAEval 数据目录应满足以下结构：
 - `outputs/` 用于本地运行产物，不会提交到 GitHub。
 - `run_scaler.sh` 会自动创建并使用本地 `.venv` 虚拟环境。
 - 默认文本语义锚点使用公开 Hugging Face 模型 `bert-base-uncased`；如果本地无法加载 transformer 权重，会自动回退到仓库内置的哈希文本编码器。
-

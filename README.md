@@ -16,10 +16,18 @@ Baseline re-implementations, paper drafts, plotting scratch files, and unrelated
 
 ## Quick Start
 
-1. Prepare data:
+1. Prepare data.
+
+If you already have RCAEval data:
 
 ```bash
 ./run_scaler.sh prepare-data --source-dir /path/to/RCAEval/data
+```
+
+If you do not have RCAEval data yet:
+
+```bash
+./download_rcaeval.sh --target-dir ./data/rcaeval
 ```
 
 2. Run a smoke check:
@@ -57,7 +65,21 @@ The expected RCAEval layout is:
   RE3/
 ```
 
-You can either point to an existing dataset root or copy/symlink it into `data/rcaeval`.
+You can prepare data in two ways:
+
+1. Reuse an existing RCAEval root and link it into this repository:
+
+```bash
+./run_scaler.sh prepare-data --source-dir /path/to/RCAEval/data
+```
+
+2. Download the official RCAEval datasets into this repository:
+
+```bash
+./download_rcaeval.sh --target-dir ./data/rcaeval
+```
+
+The download script follows the same RE1/RE2/RE3 Zenodo assets used by the official RCAEval project. Full download takes time and requires several gigabytes of free disk space.
 
 ## Scope
 
@@ -74,4 +96,3 @@ It does not include baseline comparison code.
 - `outputs/` is for local run artifacts and is not committed to the repository.
 - `run_scaler.sh` creates and uses a local `.venv` automatically.
 - The default text anchor is a public Hugging Face model (`bert-base-uncased`), with a hashed fallback if transformer weights are unavailable.
-
