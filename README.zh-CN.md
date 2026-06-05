@@ -42,6 +42,12 @@
 ./run_scaler.sh train --data-root ./data/rcaeval --epochs 10
 ```
 
+训练脚本会自动选择 `cuda`、`mps` 或 `cpu`。如果是在租用的 GPU 服务器上运行，也可以显式指定：
+
+```bash
+./run_scaler.sh train --data-root ./data/rcaeval --epochs 10 --device cuda
+```
+
 4. 运行消融实验：
 
 ```bash
@@ -80,6 +86,33 @@ RCAEval 数据目录应满足以下结构：
 ```
 
 下载脚本使用的是与官方 RCAEval 项目一致的 RE1/RE2/RE3 Zenodo 数据链接。完整下载需要较长时间，并需要数 GB 以上磁盘空间。
+
+## 云服务器运行方式
+
+完整实验建议在服务器上 clone 仓库、准备 RCAEval 数据，然后用后台方式启动训练：
+
+```bash
+nohup ./run_scaler.sh train --data-root ./data/rcaeval --epochs 10 --device cuda > outputs/main/nohup.log 2>&1 &
+```
+
+训练日志也会写入：
+
+```bash
+outputs/main/train.log
+```
+
+可以用下面的命令实时查看进度：
+
+```bash
+tail -f outputs/main/train.log
+```
+
+消融实验和评估脚本同样支持设备参数：
+
+```bash
+./run_scaler.sh ablation --data-root ./data/rcaeval --epochs 10 --device cuda
+./run_scaler.sh evaluate --checkpoint outputs/main/scaler.pt --data-root ./data/rcaeval --device cuda
+```
 
 ## 仓库范围
 

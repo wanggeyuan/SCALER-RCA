@@ -42,6 +42,12 @@ If you do not have RCAEval data yet:
 ./run_scaler.sh train --data-root ./data/rcaeval --epochs 10
 ```
 
+The training script selects `cuda`, `mps`, or `cpu` automatically. On a rented GPU server, you can make the choice explicit:
+
+```bash
+./run_scaler.sh train --data-root ./data/rcaeval --epochs 10 --device cuda
+```
+
 4. Run the ablations:
 
 ```bash
@@ -80,6 +86,33 @@ You can prepare data in two ways:
 ```
 
 The download script follows the same RE1/RE2/RE3 Zenodo assets used by the official RCAEval project. Full download takes time and requires several gigabytes of free disk space.
+
+## Running on a Cloud GPU
+
+For a full run, clone the repository on the server, prepare the RCAEval data, and run training in the background:
+
+```bash
+nohup ./run_scaler.sh train --data-root ./data/rcaeval --epochs 10 --device cuda > outputs/main/nohup.log 2>&1 &
+```
+
+Training logs are also written to:
+
+```bash
+outputs/main/train.log
+```
+
+You can monitor progress with:
+
+```bash
+tail -f outputs/main/train.log
+```
+
+The same device option is available for ablation and evaluation runs:
+
+```bash
+./run_scaler.sh ablation --data-root ./data/rcaeval --epochs 10 --device cuda
+./run_scaler.sh evaluate --checkpoint outputs/main/scaler.pt --data-root ./data/rcaeval --device cuda
+```
 
 ## Scope
 
