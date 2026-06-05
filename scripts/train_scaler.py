@@ -21,6 +21,8 @@ from scaler.data.rcaeval import RCAEvalDataset, collate_rca_batch, create_splits
 from scaler.evaluation.metrics import compute_ranking_metrics
 from scaler.model import SCALERModel
 from scaler.training.curriculum import ComplexityScheduler, compute_batch_complexity
+from scaler.utils.device import describe_device, select_device
+from scaler.utils.logging import configure_logging
 from scaler.utils.seed import set_seed
 
 
@@ -33,6 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-train-batches", type=int, default=None)
     parser.add_argument("--max-eval-batches", type=int, default=None)
     parser.add_argument("--max-cases-per-system", type=int, default=None)
+    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cuda", "mps", "cpu"])
     parser.add_argument("--save-name", type=str, default="scaler.pt")
     return parser.parse_args()
 
@@ -58,8 +61,15 @@ def _evaluate(model: SCALERModel, loader: DataLoader, device: torch.device, max_
     return metrics
 
 
-def run_training(config: SCALERExperimentConfig, data_root: str | None, output_dir: Path, checkpoint_name: str) -> dict:
+def run_training(
+    config: SCALERExperimentConfig,
+    data_root: str | None,
+    output_dir: Path,
+    checkpoint_name: str,
+    preferred_device: str = "auto",
+) -> dict:
     set_seed(config.seed)
+    logger = configure_logging(output_dir, "train.log")
     dataset = RCAEvalDataset(
         data_root=data_root,
         stages=config.stages,
@@ -78,7 +88,9 @@ def run_training(config: SCALERExperimentConfig, data_root: str | None, output_d
         num_fault_types=len(dataset.fault_encoder.classes_),
         config=config,
     )
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = select_device(preferred_device)
+    logger.info("Using device: %s", describe_device(device))
+    logger.info("Loaded %d RCAEval cases", len(dataset))
     model.to(device)
     optimizer = AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
     scheduler = ComplexityScheduler(
@@ -113,14 +125,22 @@ def run_training(config: SCALERExperimentConfig, data_root: str | None, output_d
             epoch_losses.append(float(loss_dict["total_loss"].item()))
         val_metrics = _evaluate(model, val_loader, device, config.max_eval_batches)
         scheduler.update(val_metrics["PR@1"])
-        history.append(
-            {
-                "epoch": epoch + 1,
-                "train_loss": float(sum(epoch_losses) / max(len(epoch_losses), 1)),
-                "val": val_metrics,
-                "seconds": perf_counter() - start,
-                "curriculum_threshold": scheduler.threshold,
-            }
+        epoch_record = {
+            "epoch": epoch + 1,
+            "train_loss": float(sum(epoch_losses) / max(len(epoch_losses), 1)),
+            "val": val_metrics,
+            "seconds": perf_counter() - start,
+            "curriculum_threshold": scheduler.threshold,
+        }
+        history.append(epoch_record)
+        logger.info(
+            "Epoch %d/%d - train_loss %.4f - val_PR@1 %.4f - val_MRR %.4f - %.1fs",
+            epoch + 1,
+            config.epochs,
+            epoch_record["train_loss"],
+            val_metrics["PR@1"],
+            val_metrics["MRR"],
+            epoch_record["seconds"],
         )
 
     test_metrics = _evaluate(model, test_loader, device, config.max_eval_batches)
@@ -143,6 +163,8 @@ def run_training(config: SCALERExperimentConfig, data_root: str | None, output_d
         "checkpoint": str(checkpoint_path),
     }
     (output_dir / "metrics.json").write_text(json.dumps(payload, indent=2))
+    logger.info("Saved checkpoint to %s", checkpoint_path)
+    logger.info("Saved metrics to %s", output_dir / "metrics.json")
     return payload
 
 
@@ -160,7 +182,7 @@ def main() -> None:
     if args.max_cases_per_system is not None:
         config.max_cases_per_system = args.max_cases_per_system
     output_dir = Path(config.output_dir)
-    run_training(config, args.data_root, output_dir, args.save_name)
+    run_training(config, args.data_root, output_dir, args.save_name, preferred_device=args.device)
 
 
 if __name__ == "__main__":

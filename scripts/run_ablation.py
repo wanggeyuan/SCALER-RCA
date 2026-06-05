@@ -24,6 +24,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-cases-per-system", type=int, default=None)
     parser.add_argument("--max-train-batches", type=int, default=None)
     parser.add_argument("--max-eval-batches", type=int, default=None)
+    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cuda", "mps", "cpu"])
     return parser.parse_args()
 
 
@@ -47,7 +48,7 @@ def main() -> None:
         for key, value in overrides.items():
             setattr(config, key, value)
         config.output_dir = str(args.output_dir / name)
-        metrics = run_training(config, args.data_root, Path(config.output_dir), "scaler.pt")
+        metrics = run_training(config, args.data_root, Path(config.output_dir), "scaler.pt", preferred_device=args.device)
         summary[name] = metrics["test_metrics"]
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / "summary.json").write_text(json.dumps(summary, indent=2))
