@@ -8,8 +8,7 @@ __pycache__/
 .DS_Store
 outputs/*
 !outputs/.gitkeep
-data/rcaeval/
+data/rcaeval
 *.pt
 *.pth
 *.log
-
