@@ -43,6 +43,7 @@ class SCALERExperimentConfig:
     lr_scheduler_factor: float = 0.5
     lr_scheduler_patience: int = 5
     min_learning_rate: float = 1e-6
+    service_class_balance_power: float = 0.0
     max_sequence_length: int = 256
     train_fraction: float = 0.7
     val_fraction: float = 0.15

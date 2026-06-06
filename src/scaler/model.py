@@ -132,7 +132,10 @@ class SCALERModel(nn.Module):
         }
 
     def compute_losses(self, outputs: Dict[str, torch.Tensor], batch: Dict[str, object], sample_weights: torch.Tensor | None = None) -> Dict[str, torch.Tensor]:
-        service_loss = F.cross_entropy(outputs["service_logits"], batch["service_labels"], reduction="none")
+        service_weights = batch.get("service_class_weights")
+        if service_weights is not None:
+            service_weights = service_weights.to(outputs["service_logits"].device)
+        service_loss = F.cross_entropy(outputs["service_logits"], batch["service_labels"], weight=service_weights, reduction="none")
         fault_loss = F.cross_entropy(outputs["fault_logits"], batch["fault_labels"], reduction="none")
         if sample_weights is not None:
             sample_weights = sample_weights.to(service_loss.device)

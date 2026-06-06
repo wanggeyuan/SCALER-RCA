@@ -71,6 +71,7 @@ def main() -> None:
     )
     loader = DataLoader(Subset(dataset, test_idx), batch_size=config.eval_batch_size, shuffle=False, collate_fn=collate_rca_batch)
     candidate_sets = checkpoint.get("service_candidate_sets") or build_service_candidate_sets(dataset, train_idx)
+    service_class_weights = torch.tensor(checkpoint.get("service_class_weights", [1.0] * len(checkpoint["service_classes"])))
     model = SCALERModel(dataset.input_dims, len(dataset.service_encoder.classes_), len(dataset.fault_encoder.classes_), config)
     model.load_state_dict(checkpoint["model_state_dict"])
     device = select_device(args.device)
@@ -87,6 +88,7 @@ def main() -> None:
                 candidate_sets,
                 len(checkpoint["service_classes"]),
             )
+            batch["service_class_weights"] = service_class_weights
             batch = {key: value.to(device) if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
             outputs = model(batch)
             scores.append(outputs["service_probs"].cpu().numpy())

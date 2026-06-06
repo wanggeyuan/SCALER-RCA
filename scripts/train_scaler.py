@@ -58,6 +58,7 @@ def _evaluate(
     max_batches: int | None,
     candidate_sets: dict[str, list[int]],
     num_services: int,
+    service_class_weights: torch.Tensor,
 ) -> dict:
     model.eval()
     scores, targets = [], []
@@ -67,6 +68,7 @@ def _evaluate(
             if max_batches is not None and batch_idx >= max_batches:
                 break
             batch["service_candidate_mask"] = create_service_candidate_mask(batch["systems"], candidate_sets, num_services)
+            batch["service_class_weights"] = service_class_weights
             batch = {key: value.to(device) if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
             outputs = model(batch)
             loss_dict = model.compute_losses(outputs, batch)
@@ -114,6 +116,10 @@ def run_training(
     test_loader = DataLoader(Subset(dataset, test_idx), batch_size=config.eval_batch_size, shuffle=False, collate_fn=collate_rca_batch)
     candidate_sets = build_service_candidate_sets(dataset, train_idx)
     num_services = len(dataset.service_encoder.classes_)
+    train_labels = torch.tensor([dataset[index]["service_label"] for index in train_idx], dtype=torch.long)
+    service_counts = torch.bincount(train_labels, minlength=num_services).float().clamp_min(1)
+    service_class_weights = (service_counts.mean() / service_counts).pow(config.service_class_balance_power)
+    service_class_weights = service_class_weights / service_class_weights.mean()
 
     model = SCALERModel(
         input_dims=dataset.input_dims,
@@ -181,6 +187,7 @@ def run_training(
             if config.max_train_batches is not None and batch_idx >= config.max_train_batches:
                 break
             batch["service_candidate_mask"] = create_service_candidate_mask(batch["systems"], candidate_sets, num_services)
+            batch["service_class_weights"] = service_class_weights
             batch = {key: value.to(device) if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
             optimizer.zero_grad()
             outputs = model(batch)
@@ -195,7 +202,7 @@ def run_training(
             if warmup_scheduler is not None:
                 warmup_scheduler.step()
             epoch_losses.append(float(loss_dict["total_loss"].item()))
-        val_metrics = _evaluate(model, val_loader, device, config.max_eval_batches, candidate_sets, num_services)
+        val_metrics = _evaluate(model, val_loader, device, config.max_eval_batches, candidate_sets, num_services, service_class_weights)
         plateau_scheduler.step(val_metrics["PR@1"])
         curriculum_scheduler.update(val_metrics["PR@1"])
         epoch_record = {
@@ -236,7 +243,7 @@ def run_training(
             best_val_metrics["PR@1"],
             best_val_metrics["MRR"],
         )
-    test_metrics = _evaluate(model, test_loader, device, config.max_eval_batches, candidate_sets, num_services)
+    test_metrics = _evaluate(model, test_loader, device, config.max_eval_batches, candidate_sets, num_services, service_class_weights)
     checkpoint_path = output_dir / checkpoint_name
     torch.save(
         {
@@ -246,6 +253,7 @@ def run_training(
             "service_classes": dataset.service_encoder.classes_.tolist(),
             "fault_classes": dataset.fault_encoder.classes_.tolist(),
             "service_candidate_sets": candidate_sets,
+            "service_class_weights": service_class_weights.tolist(),
             "history": history,
             "best_epoch": best_epoch,
             "best_val_metrics": best_val_metrics,

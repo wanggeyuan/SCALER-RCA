@@ -168,3 +168,39 @@ def test_service_candidate_mask_removes_invalid_classes():
 
     torch.testing.assert_close(probabilities[0, 2:], torch.zeros(2))
     torch.testing.assert_close(probabilities[1, :2], torch.zeros(2))
+
+
+def test_service_loss_accepts_training_class_weights():
+    config = SCALERExperimentConfig(
+        hidden_dim=16,
+        projection_dim=16,
+        dropout=0.0,
+        text_encoder=TextEncoderConfig(backend="hashed", max_tokens=8),
+    )
+    model = SCALERModel(
+        input_dims={"metrics": 2, "logs": 2, "traces": 2},
+        num_services=2,
+        num_fault_types=2,
+        config=config,
+    )
+    outputs = {
+        "service_logits": torch.tensor([[2.0, 0.0], [2.0, 0.0]]),
+        "fault_logits": torch.zeros(2, 2),
+        "projected": {"metrics": torch.eye(2, 16)},
+        "aligned": {"metrics": torch.eye(2, 16)},
+        "consistency_score": torch.ones(2),
+        "strategy_weights": torch.full((2, 4), 0.25),
+    }
+    batch = {
+        "service_labels": torch.tensor([0, 1]),
+        "fault_labels": torch.tensor([0, 1]),
+        "metrics_mask": torch.ones(2, dtype=torch.long),
+    }
+
+    unweighted = model.compute_losses(outputs, batch)["task_loss"]
+    weighted = model.compute_losses(
+        outputs,
+        {**batch, "service_class_weights": torch.tensor([1.0, 3.0])},
+    )["task_loss"]
+
+    assert weighted > unweighted

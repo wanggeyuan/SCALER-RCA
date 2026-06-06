@@ -12,6 +12,7 @@ early_stopping_patience: 15
 lr_scheduler_factor: 0.5
 lr_scheduler_patience: 5
 min_learning_rate: 0.000001
+service_class_balance_power: 0.0
 max_sequence_length: 256
 train_fraction: 0.7
 val_fraction: 0.15
