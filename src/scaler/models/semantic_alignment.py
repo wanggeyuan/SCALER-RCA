@@ -59,7 +59,7 @@ class TextAnchorEncoder(nn.Module):
 
                 local_files_only = not config.allow_download
                 if config.hf_endpoint:
-                    os.environ.setdefault("HF_ENDPOINT", config.hf_endpoint)
+                    os.environ["HF_ENDPOINT"] = config.hf_endpoint
                 logger.info(
                     "Loading text encoder '%s' (local_files_only=%s, allow_download=%s, HF_ENDPOINT=%s)...",
                     config.model_name,

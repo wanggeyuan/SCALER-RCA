@@ -3,12 +3,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+# Set HF endpoint early, before any imports that might trigger huggingface_hub
+try:
+    import yaml as _yaml
+    _cfg = _yaml.safe_load((ROOT / "configs" / "scaler.yaml").read_text()) or {}
+    _hf = (_cfg.get("text_encoder") or {}).get("hf_endpoint", "")
+    if _hf:
+        os.environ["HF_ENDPOINT"] = _hf
+except Exception:
+    pass
 
 from scaler.config import SCALERExperimentConfig
 from scripts.train_scaler import run_training
