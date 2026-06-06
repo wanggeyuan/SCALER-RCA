@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
@@ -152,15 +151,6 @@ class RCAEvalDataset(Dataset):
         return frame.values.astype(np.float32)
 
     @staticmethod
-    def _hash_text_column(series: pd.Series) -> np.ndarray:
-        values = series.astype(str).to_numpy()
-        hashed = np.empty(len(values), dtype=np.float32)
-        for i, val in enumerate(values):
-            digest = hashlib.md5(val.encode("utf-8")).hexdigest()
-            hashed[i] = float(int(digest[:8], 16)) / float(0xFFFFFFFF)
-        return hashed
-
-    @staticmethod
     def _load_mixed_csv(path: Path, max_rows: int = 1000) -> np.ndarray:
         frame = pd.read_csv(path, nrows=max_rows).fillna(0)
         if "time" in frame.columns:
@@ -171,7 +161,7 @@ class RCAEvalDataset(Dataset):
             if is_numeric_dtype(series.dtype):
                 features.append(series.astype(np.float32).to_numpy())
             else:
-                features.append(RCAEvalDataset._hash_text_column(series))
+                features.append(series.astype(str).str.len().astype(np.float32).to_numpy())
         if not features:
             return np.zeros((1, 1), dtype=np.float32)
         return np.column_stack(features).astype(np.float32)
