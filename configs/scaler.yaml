@@ -6,8 +6,8 @@ learning_rate: 0.001
 weight_decay: 0.0001
 hidden_dim: 128
 projection_dim: 128
-dropout: 0.15
-warmup_epochs: 5
+dropout: 0.1
+warmup_epochs: 0
 max_sequence_length: 256
 train_fraction: 0.7
 val_fraction: 0.15
