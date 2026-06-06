@@ -75,7 +75,7 @@ class DynamicFusion(nn.Module):
 
         strategies = torch.stack([mean_fused, attention_fused, gated_fused, expert_fused], dim=1)
         fused = (strategies * strategy_weights.unsqueeze(-1)).sum(dim=1)
-        fused = context + torch.sigmoid(self.residual_logit) * self.output_projection(fused)
+        fused = mean_fused + torch.sigmoid(self.residual_logit) * self.output_projection(fused)
         return {
             "fused": fused,
             "strategy_weights": strategy_weights,
