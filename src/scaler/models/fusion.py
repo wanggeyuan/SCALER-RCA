@@ -48,15 +48,22 @@ class DynamicFusion(nn.Module):
         tensors = [aligned.get(name, torch.zeros_like(first)) for name in ("metrics", "logs", "traces")]
         return torch.stack(tensors, dim=1)
 
-    def forward(self, aligned: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, aligned: Dict[str, torch.Tensor], modality_masks: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         modal_stack = self._ordered_stack(aligned)
-        context = modal_stack.mean(dim=1)
+        first = next(iter(aligned.values()))
+        mask = torch.stack(
+            [modality_masks.get(name, torch.zeros(first.size(0), device=first.device)) for name in ("metrics", "logs", "traces")],
+            dim=1,
+        )
+        modal_stack = modal_stack * mask.unsqueeze(-1)
+        context = modal_stack.sum(dim=1) / mask.sum(dim=1, keepdim=True).clamp_min(1)
         strategy_weights = torch.softmax(self.context_gate(context), dim=-1)
         modality_logits = self.modality_importance(modal_stack.reshape(modal_stack.size(0), -1))
+        modality_logits = modality_logits.masked_fill(~mask.bool(), torch.finfo(modality_logits.dtype).min)
         modality_weights = torch.softmax(modality_logits, dim=-1)
 
         mean_fused = (modal_stack * modality_weights.unsqueeze(-1)).sum(dim=1)
-        attention_fused, _ = self.attention_pool(context.unsqueeze(1), modal_stack, modal_stack)
+        attention_fused, _ = self.attention_pool(context.unsqueeze(1), modal_stack, modal_stack, key_padding_mask=~mask.bool())
         attention_fused = attention_fused.squeeze(1)
         gated_fused = self.gated_fusion(modal_stack.reshape(modal_stack.size(0), -1))
 
@@ -72,4 +79,3 @@ class DynamicFusion(nn.Module):
             "strategy_weights": strategy_weights,
             "modality_weights": modality_weights,
         }
-

@@ -12,26 +12,42 @@ from scaler.models.fusion import DynamicFusion
 from scaler.models.semantic_alignment import SemanticAlignmentModule
 
 
-def _pairwise_cosine_loss(vectors: List[torch.Tensor]) -> torch.Tensor:
+def _pairwise_cosine_loss(vectors: List[torch.Tensor], masks: List[torch.Tensor] | None = None) -> torch.Tensor:
     if len(vectors) < 2:
         return vectors[0].new_tensor(0.0)
     losses = []
     for i in range(len(vectors)):
         for j in range(i + 1, len(vectors)):
-            losses.append(1.0 - F.cosine_similarity(vectors[i], vectors[j], dim=-1).mean())
+            similarities = F.cosine_similarity(vectors[i], vectors[j], dim=-1)
+            if masks is not None:
+                valid = masks[i].bool() & masks[j].bool()
+                if not valid.any():
+                    continue
+                similarities = similarities[valid]
+            losses.append(1.0 - similarities.mean())
+    if not losses:
+        return vectors[0].new_tensor(0.0)
     return torch.stack(losses).mean()
 
 
-def _contrastive_loss(vectors: List[torch.Tensor], temperature: float = 0.07) -> torch.Tensor:
+def _contrastive_loss(vectors: List[torch.Tensor], masks: List[torch.Tensor] | None = None, temperature: float = 0.07) -> torch.Tensor:
     if len(vectors) < 2:
         return vectors[0].new_tensor(0.0)
     normalized = [F.normalize(vec, dim=-1) for vec in vectors]
     losses = []
     for i in range(len(normalized)):
         for j in range(i + 1, len(normalized)):
-            logits = normalized[i] @ normalized[j].T / temperature
+            left, right = normalized[i], normalized[j]
+            if masks is not None:
+                valid = masks[i].bool() & masks[j].bool()
+                if not valid.any():
+                    continue
+                left, right = left[valid], right[valid]
+            logits = left @ right.T / temperature
             targets = torch.arange(logits.size(0), device=logits.device)
             losses.append(F.cross_entropy(logits, targets))
+    if not losses:
+        return vectors[0].new_tensor(0.0)
     return torch.stack(losses).mean()
 
 
@@ -68,15 +84,20 @@ class SCALERModel(nn.Module):
         for name, encoder in self.encoders.items():
             if name not in batch:
                 continue
-            encoded[name] = encoder(batch[name])
+            mask = batch[f"{name}_mask"].to(batch[name].device).unsqueeze(-1)
+            encoded[name] = encoder(batch[name]) * mask
         return encoded
 
     def forward(self, batch: Dict[str, object]) -> Dict[str, torch.Tensor]:
         encoded = self.encode_modalities(batch)
-        projected = {name: F.normalize(self.projection(tensor), dim=-1) for name, tensor in encoded.items()}
+        modality_masks = {name: batch[f"{name}_mask"].to(tensor.device) for name, tensor in encoded.items()}
+        projected = {
+            name: F.normalize(self.projection(tensor), dim=-1) * modality_masks[name].unsqueeze(-1)
+            for name, tensor in encoded.items()
+        }
 
         if self.config.semantic_alignment_enabled:
-            semantic = self.semantic_alignment(projected, batch["fault_texts"])
+            semantic = self.semantic_alignment(projected, batch["fault_texts"], modality_masks)
             aligned = semantic["aligned"]
             consistency_score = semantic["consistency_score"]
         else:
@@ -84,12 +105,13 @@ class SCALERModel(nn.Module):
             consistency_score = torch.ones(next(iter(aligned.values())).size(0), device=next(iter(aligned.values())).device)
 
         if self.config.dynamic_fusion_enabled:
-            fusion = self.dynamic_fusion(aligned)
+            fusion = self.dynamic_fusion(aligned, modality_masks)
             fused = fusion["fused"]
             strategy_weights = fusion["strategy_weights"]
         else:
             ordered = [aligned[name] for name in ("metrics", "logs", "traces") if name in aligned]
-            fused = torch.stack(ordered, dim=0).mean(dim=0)
+            ordered_masks = [modality_masks[name].unsqueeze(-1) for name in ("metrics", "logs", "traces") if name in aligned]
+            fused = torch.stack(ordered, dim=0).sum(dim=0) / torch.stack(ordered_masks, dim=0).sum(dim=0).clamp_min(1)
             strategy_weights = torch.ones(fused.size(0), 1, device=fused.device)
 
         service_logits = self.service_head(fused)
@@ -118,8 +140,9 @@ class SCALERModel(nn.Module):
             fault_loss = fault_loss.mean()
 
         aligned_values = list(outputs["aligned"].values())
-        contrastive_loss = _contrastive_loss(aligned_values)
-        alignment_loss = _pairwise_cosine_loss(aligned_values)
+        aligned_masks = [batch[f"{name}_mask"].to(aligned_values[0].device) for name in outputs["aligned"]]
+        contrastive_loss = _contrastive_loss(aligned_values, aligned_masks)
+        alignment_loss = _pairwise_cosine_loss(aligned_values, aligned_masks)
         consistency_loss = 1.0 - outputs["consistency_score"].mean()
         fusion_loss = (outputs["strategy_weights"] ** 2).sum(dim=-1).mean()
 
@@ -141,4 +164,3 @@ class SCALERModel(nn.Module):
             "fusion_loss": fusion_loss,
             "total_loss": total_loss,
         }
-

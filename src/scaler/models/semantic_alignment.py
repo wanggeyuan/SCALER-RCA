@@ -117,7 +117,12 @@ class SemanticAlignmentModule(nn.Module):
             nn.Linear(hidden_dim, 1),
         )
 
-    def forward(self, modality_embeddings: Dict[str, torch.Tensor], fault_texts: List[str]) -> Dict[str, torch.Tensor]:
+    def forward(
+        self,
+        modality_embeddings: Dict[str, torch.Tensor],
+        fault_texts: List[str],
+        modality_masks: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
         if not modality_embeddings:
             raise ValueError("modality_embeddings must not be empty")
         device = next(iter(modality_embeddings.values())).device
@@ -130,12 +135,13 @@ class SemanticAlignmentModule(nn.Module):
         for name in ordered_names:
             mod_proj = self.modal_projections[name](modality_embeddings[name])
             attended, _ = self.anchor_attention(mod_proj.unsqueeze(1), anchor_token, anchor_token)
-            pre_cross[name] = mod_proj + attended.squeeze(1)
+            pre_cross[name] = (mod_proj + attended.squeeze(1)) * modality_masks[name].unsqueeze(-1)
 
         stacked = torch.stack(list(pre_cross.values()), dim=1)
-        cross_modal, _ = self.cross_modal_attention(stacked, stacked, stacked)
+        missing = torch.stack([~modality_masks[name].bool() for name in ordered_names], dim=1)
+        cross_modal, _ = self.cross_modal_attention(stacked, stacked, stacked, key_padding_mask=missing)
         for idx, name in enumerate(ordered_names):
-            aligned[name] = pre_cross[name] + cross_modal[:, idx, :]
+            aligned[name] = (pre_cross[name] + cross_modal[:, idx, :]) * modality_masks[name].unsqueeze(-1)
 
         concat = []
         for name in ("metrics", "logs", "traces"):
@@ -148,4 +154,3 @@ class SemanticAlignmentModule(nn.Module):
             "consistency_score": consistency_score,
             "normalized": {name: F.normalize(value, dim=-1) for name, value in aligned.items()},
         }
-
