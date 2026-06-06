@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
@@ -9,6 +10,7 @@ import pandas as pd
 import torch
 from pandas.api.types import is_numeric_dtype
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 
 from scaler.utils.paths import resolve_data_root
@@ -297,11 +299,29 @@ def collate_rca_batch(batch: List[Dict[str, object]]) -> Dict[str, object]:
 
 
 def create_splits(dataset: RCAEvalDataset, train_fraction: float, val_fraction: float, seed: int) -> tuple[List[int], List[int], List[int]]:
-    rng = np.random.default_rng(seed)
     indices = np.arange(len(dataset))
-    rng.shuffle(indices)
     total = len(indices)
     train_end = max(1, int(total * train_fraction)) if total >= 1 else 0
     val_size = max(1, int(total * val_fraction)) if total >= 3 else max(0, total - train_end - 1)
+    fault_types = np.asarray([case.fault_type for case in dataset.cases])
+
+    if fault_types.size and min(Counter(fault_types).values()) >= 6:
+        train_idx, remainder_idx = train_test_split(
+            indices,
+            train_size=train_end,
+            random_state=seed,
+            stratify=fault_types,
+        )
+        remainder_faults = fault_types[remainder_idx]
+        val_idx, test_idx = train_test_split(
+            remainder_idx,
+            train_size=val_size,
+            random_state=seed,
+            stratify=remainder_faults,
+        )
+        return train_idx.tolist(), val_idx.tolist(), test_idx.tolist()
+
+    rng = np.random.default_rng(seed)
+    rng.shuffle(indices)
     val_end = min(total - 1, train_end + val_size) if total >= 2 else train_end
     return indices[:train_end].tolist(), indices[train_end:val_end].tolist(), indices[val_end:].tolist()

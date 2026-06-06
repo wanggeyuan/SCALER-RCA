@@ -1,8 +1,9 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 
-from scaler.data.rcaeval import RCAEvalDataset
+from scaler.data.rcaeval import RCAEvalDataset, create_splits
 
 
 def _write_case(case_dir: Path, metrics_name: str, include_logs: bool, include_traces: bool) -> None:
@@ -52,3 +53,19 @@ def test_dataset_ignores_numeric_suffix_on_re3_fault_directory(tmp_path: Path):
 
     assert dataset.cases[0].root_cause_service == "ts-route-service"
     assert dataset.cases[0].fault_type == "f3"
+
+
+def test_create_splits_stratifies_fault_types_when_counts_are_sufficient():
+    class FakeDataset:
+        cases = [SimpleNamespace(fault_type=fault) for fault in ("cpu", "mem") for _ in range(40)]
+
+        def __len__(self):
+            return len(self.cases)
+
+    dataset = FakeDataset()
+    train, val, test = create_splits(dataset, train_fraction=0.7, val_fraction=0.15, seed=42)
+
+    for indices, expected_per_fault in ((train, 28), (val, 6), (test, 6)):
+        fault_types = [dataset.cases[index].fault_type for index in indices]
+        assert fault_types.count("cpu") == expected_per_fault
+        assert fault_types.count("mem") == expected_per_fault
