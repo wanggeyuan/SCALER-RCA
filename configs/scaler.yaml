@@ -15,6 +15,7 @@ min_learning_rate: 0.000001
 max_sequence_length: 256
 train_fraction: 0.7
 val_fraction: 0.15
+split_stratify_by: fault_type
 include_modalities:
   - metrics
   - logs

@@ -94,7 +94,13 @@ def run_training(
         systems=config.systems,
         max_cases_per_system=config.max_cases_per_system,
     )
-    train_idx, val_idx, test_idx = create_splits(dataset, config.train_fraction, config.val_fraction, config.seed)
+    train_idx, val_idx, test_idx = create_splits(
+        dataset,
+        config.train_fraction,
+        config.val_fraction,
+        config.seed,
+        stratify_by=config.split_stratify_by,
+    )
     train_loader = DataLoader(Subset(dataset, train_idx), batch_size=config.batch_size, shuffle=True, collate_fn=collate_rca_batch)
     val_loader = DataLoader(Subset(dataset, val_idx), batch_size=config.eval_batch_size, shuffle=False, collate_fn=collate_rca_batch)
     test_loader = DataLoader(Subset(dataset, test_idx), batch_size=config.eval_batch_size, shuffle=False, collate_fn=collate_rca_batch)

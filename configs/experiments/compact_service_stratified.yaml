@@ -1,0 +1,39 @@
+seed: 42
+batch_size: 8
+eval_batch_size: 8
+epochs: 100
+learning_rate: 0.001
+weight_decay: 0.0001
+hidden_dim: 128
+projection_dim: 128
+dropout: 0.1
+early_stopping_patience: 15
+lr_scheduler_factor: 0.5
+lr_scheduler_patience: 5
+min_learning_rate: 0.000001
+train_fraction: 0.7
+val_fraction: 0.15
+split_stratify_by: service
+include_modalities:
+  - metrics
+  - logs
+  - traces
+stages:
+  - RE1
+  - RE2
+  - RE3
+output_dir: outputs/compact_service_stratified
+curriculum_enabled: false
+text_encoder:
+  model_name: bert-base-uncased
+  backend: auto
+  max_tokens: 256
+  allow_download: true
+  hf_endpoint: https://hf-mirror.com
+loss_weights:
+  task: 1.0
+  fault: 0.5
+  contrastive: 0.1
+  alignment: 0.1
+  consistency: 0.05
+  fusion: 0.01

@@ -298,26 +298,35 @@ def collate_rca_batch(batch: List[Dict[str, object]]) -> Dict[str, object]:
     return result
 
 
-def create_splits(dataset: RCAEvalDataset, train_fraction: float, val_fraction: float, seed: int) -> tuple[List[int], List[int], List[int]]:
+def create_splits(
+    dataset: RCAEvalDataset,
+    train_fraction: float,
+    val_fraction: float,
+    seed: int,
+    stratify_by: str = "fault_type",
+) -> tuple[List[int], List[int], List[int]]:
     indices = np.arange(len(dataset))
     total = len(indices)
     train_end = max(1, int(total * train_fraction)) if total >= 1 else 0
     val_size = max(1, int(total * val_fraction)) if total >= 3 else max(0, total - train_end - 1)
-    fault_types = np.asarray([case.fault_type for case in dataset.cases])
+    if stratify_by not in {"fault_type", "service"}:
+        raise ValueError(f"Unsupported split stratification: {stratify_by}")
+    attribute = "fault_type" if stratify_by == "fault_type" else "root_cause_service"
+    strata = np.asarray([getattr(case, attribute) for case in dataset.cases])
 
-    if fault_types.size and min(Counter(fault_types).values()) >= 6:
+    if strata.size and min(Counter(strata).values()) >= 6:
         train_idx, remainder_idx = train_test_split(
             indices,
             train_size=train_end,
             random_state=seed,
-            stratify=fault_types,
+            stratify=strata,
         )
-        remainder_faults = fault_types[remainder_idx]
+        remainder_strata = strata[remainder_idx]
         val_idx, test_idx = train_test_split(
             remainder_idx,
             train_size=val_size,
             random_state=seed,
-            stratify=remainder_faults,
+            stratify=remainder_strata,
         )
         return train_idx.tolist(), val_idx.tolist(), test_idx.tolist()
 

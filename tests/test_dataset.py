@@ -69,3 +69,23 @@ def test_create_splits_stratifies_fault_types_when_counts_are_sufficient():
         fault_types = [dataset.cases[index].fault_type for index in indices]
         assert fault_types.count("cpu") == expected_per_fault
         assert fault_types.count("mem") == expected_per_fault
+
+
+def test_create_splits_can_stratify_root_cause_services():
+    class FakeDataset:
+        cases = [
+            SimpleNamespace(fault_type="cpu", root_cause_service=service)
+            for service in ("cart", "payment")
+            for _ in range(40)
+        ]
+
+        def __len__(self):
+            return len(self.cases)
+
+    dataset = FakeDataset()
+    train, val, test = create_splits(dataset, train_fraction=0.7, val_fraction=0.15, seed=42, stratify_by="service")
+
+    for indices, expected_per_service in ((train, 28), (val, 6), (test, 6)):
+        services = [dataset.cases[index].root_cause_service for index in indices]
+        assert services.count("cart") == expected_per_service
+        assert services.count("payment") == expected_per_service

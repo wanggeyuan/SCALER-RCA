@@ -46,6 +46,7 @@ class SCALERExperimentConfig:
     max_sequence_length: int = 256
     train_fraction: float = 0.7
     val_fraction: float = 0.15
+    split_stratify_by: str = "fault_type"
     include_modalities: List[str] = field(default_factory=lambda: ["metrics", "logs", "traces"])
     stages: List[str] = field(default_factory=lambda: ["RE1", "RE2", "RE3"])
     systems: List[str] = field(default_factory=list)

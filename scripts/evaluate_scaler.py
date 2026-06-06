@@ -62,7 +62,13 @@ def main() -> None:
         systems=config.systems,
         max_cases_per_system=config.max_cases_per_system,
     )
-    _, _, test_idx = create_splits(dataset, config.train_fraction, config.val_fraction, config.seed)
+    _, _, test_idx = create_splits(
+        dataset,
+        config.train_fraction,
+        config.val_fraction,
+        config.seed,
+        stratify_by=config.split_stratify_by,
+    )
     loader = DataLoader(Subset(dataset, test_idx), batch_size=config.eval_batch_size, shuffle=False, collate_fn=collate_rca_batch)
     model = SCALERModel(dataset.input_dims, len(dataset.service_encoder.classes_), len(dataset.fault_encoder.classes_), config)
     model.load_state_dict(checkpoint["model_state_dict"])
