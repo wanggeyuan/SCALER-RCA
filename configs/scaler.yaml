@@ -28,6 +28,7 @@ text_encoder:
   backend: auto
   max_tokens: 256
   allow_download: true
+  hf_endpoint: https://hf-mirror.com
 loss_weights:
   task: 1.0
   fault: 0.5

@@ -54,14 +54,18 @@ class TextAnchorEncoder(nn.Module):
         self._fallback_reason = None
         if config.backend in {"auto", "transformers"}:
             try:
+                import os
                 from transformers import AutoModel, AutoTokenizer
 
                 local_files_only = not config.allow_download
+                if config.hf_endpoint:
+                    os.environ.setdefault("HF_ENDPOINT", config.hf_endpoint)
                 logger.info(
-                    "Loading text encoder '%s' (local_files_only=%s, allow_download=%s)...",
+                    "Loading text encoder '%s' (local_files_only=%s, allow_download=%s, HF_ENDPOINT=%s)...",
                     config.model_name,
                     local_files_only,
                     config.allow_download,
+                    os.environ.get("HF_ENDPOINT", "(default)"),
                 )
                 self.transformer_tokenizer = AutoTokenizer.from_pretrained(config.model_name, local_files_only=local_files_only)
                 self.transformer_model = AutoModel.from_pretrained(config.model_name, local_files_only=local_files_only)

@@ -13,6 +13,7 @@ class TextEncoderConfig:
     backend: str = "auto"
     max_tokens: int = 256
     allow_download: bool = True
+    hf_endpoint: str = ""
 
 
 @dataclass
