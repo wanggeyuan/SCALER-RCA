@@ -39,6 +39,10 @@ class SCALERExperimentConfig:
     projection_dim: int = 128
     dropout: float = 0.1
     warmup_epochs: int = 0
+    early_stopping_patience: int = 15
+    lr_scheduler_factor: float = 0.5
+    lr_scheduler_patience: int = 5
+    min_learning_rate: float = 1e-6
     max_sequence_length: int = 256
     train_fraction: float = 0.7
     val_fraction: float = 0.15
@@ -81,4 +85,3 @@ class SCALERExperimentConfig:
             "text_encoder": self.text_encoder.__dict__,
             "curriculum": self.curriculum.__dict__,
         }
-

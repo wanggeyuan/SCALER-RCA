@@ -24,7 +24,7 @@ except Exception:
 import numpy as np
 import torch
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 from torch.utils.data import DataLoader, Subset
 
 from scaler.config import SCALERExperimentConfig
@@ -70,6 +70,12 @@ def _evaluate(model: SCALERModel, loader: DataLoader, device: torch.device, max_
     metrics = compute_ranking_metrics(score_matrix=np.concatenate(scores, axis=0), targets=np.concatenate(targets, axis=0))
     metrics["loss"] = float(sum(losses) / len(losses))
     return metrics
+
+
+def is_better_ranking_score(candidate: dict, best: dict | None) -> bool:
+    if best is None:
+        return True
+    return (candidate["PR@1"], candidate["MRR"]) > (best["PR@1"], best["MRR"])
 
 
 def run_training(
@@ -126,10 +132,17 @@ def run_training(
     if config.warmup_epochs > 0:
         warmup_steps = config.warmup_epochs * len(train_loader)
         lr_lambda = lambda step: min(1.0, (step + 1) / warmup_steps)
-        lr_scheduler = LambdaLR(optimizer, lr_lambda)
+        warmup_scheduler = LambdaLR(optimizer, lr_lambda)
     else:
-        lr_scheduler = None
-    scheduler = ComplexityScheduler(
+        warmup_scheduler = None
+    plateau_scheduler = ReduceLROnPlateau(
+        optimizer,
+        mode="max",
+        factor=config.lr_scheduler_factor,
+        patience=config.lr_scheduler_patience,
+        min_lr=config.min_learning_rate,
+    )
+    curriculum_scheduler = ComplexityScheduler(
         threshold=config.curriculum.initial_threshold,
         min_threshold=config.curriculum.min_threshold,
         max_threshold=config.curriculum.max_threshold,
@@ -140,8 +153,10 @@ def run_training(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     history = []
-    best_val_pr1 = -1.0
+    best_val_metrics = None
     best_state_dict = None
+    best_epoch = None
+    epochs_without_improvement = 0
     for epoch in range(config.epochs):
         model.train()
         epoch_losses = []
@@ -155,22 +170,24 @@ def run_training(
             sample_weights = None
             if config.curriculum_enabled and config.curriculum.enabled:
                 complexity = compute_batch_complexity(batch).to(device)
-                sample_weights = scheduler.weights(complexity)
+                sample_weights = curriculum_scheduler.weights(complexity)
             loss_dict = model.compute_losses(outputs, batch, sample_weights=sample_weights)
             loss_dict["total_loss"].backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
-            if lr_scheduler is not None:
-                lr_scheduler.step()
+            if warmup_scheduler is not None:
+                warmup_scheduler.step()
             epoch_losses.append(float(loss_dict["total_loss"].item()))
         val_metrics = _evaluate(model, val_loader, device, config.max_eval_batches)
-        scheduler.update(val_metrics["PR@1"])
+        plateau_scheduler.step(val_metrics["PR@1"])
+        curriculum_scheduler.update(val_metrics["PR@1"])
         epoch_record = {
             "epoch": epoch + 1,
             "train_loss": float(sum(epoch_losses) / max(len(epoch_losses), 1)),
             "val": val_metrics,
             "seconds": perf_counter() - start,
-            "curriculum_threshold": scheduler.threshold,
+            "curriculum_threshold": curriculum_scheduler.threshold,
+            "learning_rate": optimizer.param_groups[0]["lr"],
         }
         history.append(epoch_record)
         logger.info(
@@ -182,14 +199,26 @@ def run_training(
             val_metrics["MRR"],
             epoch_record["seconds"],
         )
-        if val_metrics["PR@1"] > best_val_pr1:
-            best_val_pr1 = val_metrics["PR@1"]
+        if is_better_ranking_score(val_metrics, best_val_metrics):
+            best_val_metrics = dict(val_metrics)
             best_state_dict = {k: v.cpu().clone() for k, v in model.state_dict().items()}
-            logger.info("New best val_PR@1: %.4f (epoch %d)", best_val_pr1, epoch + 1)
+            best_epoch = epoch + 1
+            epochs_without_improvement = 0
+            logger.info("New best validation score: PR@1=%.4f, MRR=%.4f (epoch %d)", val_metrics["PR@1"], val_metrics["MRR"], best_epoch)
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= config.early_stopping_patience:
+                logger.info("Early stopping at epoch %d after %d epochs without improvement", epoch + 1, epochs_without_improvement)
+                break
 
     if best_state_dict is not None:
         model.load_state_dict(best_state_dict)
-        logger.info("Loaded best checkpoint (val_PR@1=%.4f) for test evaluation", best_val_pr1)
+        logger.info(
+            "Loaded best checkpoint from epoch %d (val_PR@1=%.4f, val_MRR=%.4f) for test evaluation",
+            best_epoch,
+            best_val_metrics["PR@1"],
+            best_val_metrics["MRR"],
+        )
     test_metrics = _evaluate(model, test_loader, device, config.max_eval_batches)
     checkpoint_path = output_dir / checkpoint_name
     torch.save(
@@ -200,12 +229,16 @@ def run_training(
             "service_classes": dataset.service_encoder.classes_.tolist(),
             "fault_classes": dataset.fault_encoder.classes_.tolist(),
             "history": history,
+            "best_epoch": best_epoch,
+            "best_val_metrics": best_val_metrics,
         },
         checkpoint_path,
     )
     payload = {
         "config": config.to_dict(),
         "history": history,
+        "best_epoch": best_epoch,
+        "best_val_metrics": best_val_metrics,
         "test_metrics": test_metrics,
         "checkpoint": str(checkpoint_path),
     }
