@@ -26,34 +26,13 @@ class MetricsEncoder(nn.Module):
         )
         self.lstm = nn.LSTM(hidden_dim, hidden_dim, num_layers=2, batch_first=True, bidirectional=True, dropout=dropout)
         self.proj = nn.Linear(hidden_dim * 2, hidden_dim)
-        self.stats_proj = nn.Sequential(
-            nn.Linear(input_dim * 4, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-        )
-        self.fusion = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-        )
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor, lengths: torch.Tensor | None = None) -> torch.Tensor:
-        valid = _valid_time_mask(x, lengths)
-        x = x * valid.unsqueeze(-1)
-        temporal = self.cnn(x.transpose(1, 2)).transpose(1, 2)
-        encoded, _ = self.lstm(temporal)
-        temporal_embedding = self.dropout(self.proj(encoded[:, -1, :]))
-
-        denominator = valid.sum(dim=1, keepdim=True).clamp_min(1).to(x.dtype)
-        mean = x.sum(dim=1) / denominator
-        variance = (((x - mean.unsqueeze(1)) ** 2) * valid.unsqueeze(-1)).sum(dim=1) / denominator
-        std = torch.sqrt(variance + 1e-6)
-        maximum = x.masked_fill(~valid.unsqueeze(-1), torch.finfo(x.dtype).min).max(dim=1).values
-        last = x[:, -1, :]
-        stats_embedding = self.stats_proj(torch.cat([mean, std, maximum, last], dim=-1))
-
-        return self.fusion(torch.cat([temporal_embedding, stats_embedding], dim=-1))
+        x = x * _valid_time_mask(x, lengths).unsqueeze(-1)
+        x = self.cnn(x.transpose(1, 2)).transpose(1, 2)
+        encoded, _ = self.lstm(x)
+        return self.dropout(self.proj(encoded[:, -1, :]))
 
 
 class PositionalEncoding(nn.Module):

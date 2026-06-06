@@ -2,7 +2,6 @@ import torch
 
 from scaler.config import SCALERExperimentConfig, TextEncoderConfig
 from scaler.model import SCALERModel
-from scaler.models.encoders import MetricsEncoder
 from scaler.models.semantic_alignment import SemanticAlignmentModule
 
 
@@ -138,20 +137,3 @@ def test_semantic_alignment_preserves_modality_residual():
 
     torch.testing.assert_close(aligned["metrics"], embeddings["metrics"])
     torch.testing.assert_close(aligned["logs"], embeddings["logs"])
-
-
-def test_metrics_encoder_preserves_per_channel_statistics():
-    encoder = MetricsEncoder(input_dim=3, hidden_dim=16, dropout=0.0)
-    for name, parameter in encoder.named_parameters():
-        if name.startswith(("cnn.", "lstm.", "proj.")):
-            torch.nn.init.zeros_(parameter)
-    baseline = torch.zeros(2, 5, 3)
-    anomalous = baseline.clone()
-    anomalous[:, 1:4, 1] = 10.0
-    lengths = torch.full((2,), 5, dtype=torch.long)
-
-    with torch.no_grad():
-        baseline_embedding = encoder(baseline, lengths)
-        anomalous_embedding = encoder(anomalous, lengths)
-
-    assert not torch.allclose(baseline_embedding, anomalous_embedding)
