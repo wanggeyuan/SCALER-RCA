@@ -137,3 +137,34 @@ def test_semantic_alignment_preserves_modality_residual():
 
     torch.testing.assert_close(aligned["metrics"], embeddings["metrics"])
     torch.testing.assert_close(aligned["logs"], embeddings["logs"])
+
+
+def test_service_candidate_mask_removes_invalid_classes():
+    config = SCALERExperimentConfig(
+        hidden_dim=16,
+        projection_dim=16,
+        dropout=0.0,
+        semantic_alignment_enabled=False,
+        dynamic_fusion_enabled=False,
+        text_encoder=TextEncoderConfig(backend="hashed", max_tokens=8),
+    )
+    model = SCALERModel(
+        input_dims={"metrics": 3, "logs": 2, "traces": 2},
+        num_services=4,
+        num_fault_types=2,
+        config=config,
+    )
+    model.eval()
+    batch = {
+        "metrics": torch.randn(2, 5, 3),
+        "metrics_mask": torch.ones(2, dtype=torch.long),
+        "metrics_lengths": torch.full((2,), 5, dtype=torch.long),
+        "fault_texts": ["RE2-SS: cpu fault", "RE2-OB: delay fault"],
+        "service_candidate_mask": torch.tensor([[True, True, False, False], [False, False, True, True]]),
+    }
+
+    with torch.no_grad():
+        probabilities = model(batch)["service_probs"]
+
+    torch.testing.assert_close(probabilities[0, 2:], torch.zeros(2))
+    torch.testing.assert_close(probabilities[1, :2], torch.zeros(2))

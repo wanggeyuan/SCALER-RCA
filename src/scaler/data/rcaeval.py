@@ -249,6 +249,7 @@ class RCAEvalDataset(Dataset):
             "complexity_score": case.complexity_score,
             "case_id": case.case_id,
             "stage": case.stage,
+            "system": case.system,
             "fault_text": case.fault_text,
             "fault_type": case.fault_type,
             "service_name": case.root_cause_service,
@@ -285,6 +286,7 @@ def collate_rca_batch(batch: List[Dict[str, object]]) -> Dict[str, object]:
         "complexity_scores": torch.tensor([item["complexity_score"] for item in batch], dtype=torch.float32),
         "case_ids": [item["case_id"] for item in batch],
         "stages": [item["stage"] for item in batch],
+        "systems": [item["system"] for item in batch],
         "fault_texts": [item["fault_text"] for item in batch],
         "fault_types": [item["fault_type"] for item in batch],
         "service_names": [item["service_name"] for item in batch],
@@ -296,6 +298,27 @@ def collate_rca_batch(batch: List[Dict[str, object]]) -> Dict[str, object]:
             result[f"{name}_mask"] = mask
             result[f"{name}_lengths"] = lengths
     return result
+
+
+def build_service_candidate_sets(dataset: RCAEvalDataset, train_indices: Sequence[int]) -> Dict[str, List[int]]:
+    candidates: Dict[str, set[int]] = {}
+    for index in train_indices:
+        case = dataset.cases[index]
+        family = case.system.rsplit("-", 1)[-1]
+        label = int(dataset.service_encoder.transform([case.root_cause_service])[0])
+        candidates.setdefault(family, set()).add(label)
+    return {family: sorted(labels) for family, labels in candidates.items()}
+
+
+def create_service_candidate_mask(systems: Sequence[str], candidate_sets: Dict[str, List[int]], num_services: int) -> torch.Tensor:
+    mask = torch.zeros((len(systems), num_services), dtype=torch.bool)
+    for row, system in enumerate(systems):
+        allowed = candidate_sets.get(system.rsplit("-", 1)[-1])
+        if allowed:
+            mask[row, allowed] = True
+        else:
+            mask[row] = True
+    return mask
 
 
 def create_splits(

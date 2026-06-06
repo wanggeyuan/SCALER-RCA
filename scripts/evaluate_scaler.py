@@ -26,7 +26,7 @@ import torch
 from torch.utils.data import DataLoader, Subset
 
 from scaler.config import SCALERExperimentConfig
-from scaler.data.rcaeval import RCAEvalDataset, collate_rca_batch, create_splits
+from scaler.data.rcaeval import RCAEvalDataset, build_service_candidate_sets, collate_rca_batch, create_service_candidate_mask, create_splits
 from scaler.evaluation.metrics import compute_ranking_metrics
 from scaler.model import SCALERModel
 from scaler.utils.device import describe_device, select_device
@@ -62,7 +62,7 @@ def main() -> None:
         systems=config.systems,
         max_cases_per_system=config.max_cases_per_system,
     )
-    _, _, test_idx = create_splits(
+    train_idx, _, test_idx = create_splits(
         dataset,
         config.train_fraction,
         config.val_fraction,
@@ -70,6 +70,7 @@ def main() -> None:
         stratify_by=config.split_stratify_by,
     )
     loader = DataLoader(Subset(dataset, test_idx), batch_size=config.eval_batch_size, shuffle=False, collate_fn=collate_rca_batch)
+    candidate_sets = checkpoint.get("service_candidate_sets") or build_service_candidate_sets(dataset, train_idx)
     model = SCALERModel(dataset.input_dims, len(dataset.service_encoder.classes_), len(dataset.fault_encoder.classes_), config)
     model.load_state_dict(checkpoint["model_state_dict"])
     device = select_device(args.device)
@@ -81,6 +82,11 @@ def main() -> None:
         for batch_idx, batch in enumerate(loader):
             if args.max_eval_batches is not None and batch_idx >= args.max_eval_batches:
                 break
+            batch["service_candidate_mask"] = create_service_candidate_mask(
+                batch["systems"],
+                candidate_sets,
+                len(checkpoint["service_classes"]),
+            )
             batch = {key: value.to(device) if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
             outputs = model(batch)
             scores.append(outputs["service_probs"].cpu().numpy())

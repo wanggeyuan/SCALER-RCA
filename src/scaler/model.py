@@ -115,6 +115,9 @@ class SCALERModel(nn.Module):
             strategy_weights = torch.ones(fused.size(0), 1, device=fused.device)
 
         service_logits = self.service_head(fused)
+        if "service_candidate_mask" in batch:
+            candidate_mask = batch["service_candidate_mask"].to(service_logits.device).bool()
+            service_logits = service_logits.masked_fill(~candidate_mask, torch.finfo(service_logits.dtype).min)
         fault_logits = self.fault_head(fused)
 
         return {

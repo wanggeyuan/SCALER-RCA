@@ -28,7 +28,7 @@ from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 from torch.utils.data import DataLoader, Subset
 
 from scaler.config import SCALERExperimentConfig
-from scaler.data.rcaeval import RCAEvalDataset, collate_rca_batch, create_splits
+from scaler.data.rcaeval import RCAEvalDataset, build_service_candidate_sets, collate_rca_batch, create_service_candidate_mask, create_splits
 from scaler.evaluation.metrics import compute_ranking_metrics
 from scaler.model import SCALERModel
 from scaler.training.curriculum import ComplexityScheduler, compute_batch_complexity
@@ -51,7 +51,14 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _evaluate(model: SCALERModel, loader: DataLoader, device: torch.device, max_batches: int | None) -> dict:
+def _evaluate(
+    model: SCALERModel,
+    loader: DataLoader,
+    device: torch.device,
+    max_batches: int | None,
+    candidate_sets: dict[str, list[int]],
+    num_services: int,
+) -> dict:
     model.eval()
     scores, targets = [], []
     losses = []
@@ -59,6 +66,7 @@ def _evaluate(model: SCALERModel, loader: DataLoader, device: torch.device, max_
         for batch_idx, batch in enumerate(loader):
             if max_batches is not None and batch_idx >= max_batches:
                 break
+            batch["service_candidate_mask"] = create_service_candidate_mask(batch["systems"], candidate_sets, num_services)
             batch = {key: value.to(device) if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
             outputs = model(batch)
             loss_dict = model.compute_losses(outputs, batch)
@@ -104,10 +112,12 @@ def run_training(
     train_loader = DataLoader(Subset(dataset, train_idx), batch_size=config.batch_size, shuffle=True, collate_fn=collate_rca_batch)
     val_loader = DataLoader(Subset(dataset, val_idx), batch_size=config.eval_batch_size, shuffle=False, collate_fn=collate_rca_batch)
     test_loader = DataLoader(Subset(dataset, test_idx), batch_size=config.eval_batch_size, shuffle=False, collate_fn=collate_rca_batch)
+    candidate_sets = build_service_candidate_sets(dataset, train_idx)
+    num_services = len(dataset.service_encoder.classes_)
 
     model = SCALERModel(
         input_dims=dataset.input_dims,
-        num_services=len(dataset.service_encoder.classes_),
+        num_services=num_services,
         num_fault_types=len(dataset.fault_encoder.classes_),
         config=config,
     )
@@ -170,6 +180,7 @@ def run_training(
         for batch_idx, batch in enumerate(train_loader):
             if config.max_train_batches is not None and batch_idx >= config.max_train_batches:
                 break
+            batch["service_candidate_mask"] = create_service_candidate_mask(batch["systems"], candidate_sets, num_services)
             batch = {key: value.to(device) if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
             optimizer.zero_grad()
             outputs = model(batch)
@@ -184,7 +195,7 @@ def run_training(
             if warmup_scheduler is not None:
                 warmup_scheduler.step()
             epoch_losses.append(float(loss_dict["total_loss"].item()))
-        val_metrics = _evaluate(model, val_loader, device, config.max_eval_batches)
+        val_metrics = _evaluate(model, val_loader, device, config.max_eval_batches, candidate_sets, num_services)
         plateau_scheduler.step(val_metrics["PR@1"])
         curriculum_scheduler.update(val_metrics["PR@1"])
         epoch_record = {
@@ -225,7 +236,7 @@ def run_training(
             best_val_metrics["PR@1"],
             best_val_metrics["MRR"],
         )
-    test_metrics = _evaluate(model, test_loader, device, config.max_eval_batches)
+    test_metrics = _evaluate(model, test_loader, device, config.max_eval_batches, candidate_sets, num_services)
     checkpoint_path = output_dir / checkpoint_name
     torch.save(
         {
@@ -234,6 +245,7 @@ def run_training(
             "input_dims": dataset.input_dims,
             "service_classes": dataset.service_encoder.classes_.tolist(),
             "fault_classes": dataset.fault_encoder.classes_.tolist(),
+            "service_candidate_sets": candidate_sets,
             "history": history,
             "best_epoch": best_epoch,
             "best_val_metrics": best_val_metrics,
