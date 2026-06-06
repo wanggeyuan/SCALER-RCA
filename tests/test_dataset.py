@@ -42,3 +42,13 @@ def test_dataset_ignores_empty_modalities(tmp_path: Path):
     assert "metrics" in sample["data"]
     assert "logs" not in sample["data"]
     assert "traces" not in sample["data"]
+
+
+def test_dataset_ignores_numeric_suffix_on_re3_fault_directory(tmp_path: Path):
+    (tmp_path / "RE2" / "RE2-TT").mkdir(parents=True)
+    _write_case(tmp_path / "RE3" / "RE3-TT" / "ts-route-service_f3_1" / "0", "metrics.csv", False, False)
+
+    dataset = RCAEvalDataset(data_root=tmp_path, stages=["RE3"])
+
+    assert dataset.cases[0].root_cause_service == "ts-route-service"
+    assert dataset.cases[0].fault_type == "f3"

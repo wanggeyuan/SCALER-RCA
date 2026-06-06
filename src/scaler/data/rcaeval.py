@@ -73,11 +73,10 @@ class RCAEvalDataset(Dataset):
                 for service_fault_dir in sorted(system_root.iterdir()):
                     if not service_fault_dir.is_dir():
                         continue
-                    parts = service_fault_dir.name.split("_")
-                    if len(parts) < 2:
+                    parsed = self._parse_service_fault(service_fault_dir.name)
+                    if parsed is None:
                         continue
-                    service = "_".join(parts[:-1])
-                    fault_type = parts[-1]
+                    service, fault_type = parsed
                     for exp_dir in sorted(service_fault_dir.iterdir()):
                         if not exp_dir.is_dir():
                             continue
@@ -99,6 +98,17 @@ class RCAEvalDataset(Dataset):
                             systems_seen[system_name] += 1
         if not self.cases:
             raise RuntimeError(f"No valid RCAEval cases found under {self.data_root}.")
+
+    @staticmethod
+    def _parse_service_fault(directory_name: str) -> tuple[str, str] | None:
+        parts = directory_name.split("_")
+        if len(parts) < 2:
+            return None
+        known_faults = {"cpu", "mem", "delay", "loss", "disk", "socket", "f1", "f2", "f3", "f4", "f5"}
+        for index in range(len(parts) - 1, 0, -1):
+            if parts[index] in known_faults:
+                return "_".join(parts[:index]), parts[index]
+        return "_".join(parts[:-1]), parts[-1]
 
     def _load_modalities(self, case: RCACase, exp_dir: Path) -> None:
         if "metrics" in self.include_modalities:
