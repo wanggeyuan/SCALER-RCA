@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pandas as pd
 
 from scaler.data.rcaeval import RCAEvalDataset, create_splits
@@ -53,6 +54,23 @@ def test_dataset_ignores_numeric_suffix_on_re3_fault_directory(tmp_path: Path):
 
     assert dataset.cases[0].root_cause_service == "ts-route-service"
     assert dataset.cases[0].fault_type == "f3"
+
+
+def test_dataset_normalizers_fit_only_requested_cases(tmp_path: Path):
+    (tmp_path / "RE2" / "RE2-SS").mkdir(parents=True)
+    first = tmp_path / "RE1" / "RE1-SS" / "cart_cpu" / "0"
+    second = tmp_path / "RE1" / "RE1-SS" / "payment_cpu" / "0"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+    pd.DataFrame({"time": [1, 2], "a": [1.0, 3.0]}).to_csv(first / "data.csv", index=False)
+    pd.DataFrame({"time": [1, 2], "a": [101.0, 103.0]}).to_csv(second / "data.csv", index=False)
+    dataset = RCAEvalDataset(data_root=tmp_path, stages=["RE1"], normalize=False)
+
+    dataset.normalize_modalities([0])
+
+    assert np.isclose(dataset.cases[0].metrics.mean(), 0.0, atol=1e-6)
+    assert dataset.cases[1].metrics.mean() > 90.0
+    assert np.isclose(dataset.metrics_scaler.mean_[0], 2.0)
 
 
 def test_create_splits_stratifies_fault_types_when_counts_are_sufficient():

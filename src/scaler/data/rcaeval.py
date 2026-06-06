@@ -57,7 +57,7 @@ class RCAEvalDataset(Dataset):
         self._load_cases()
         self._fit_label_encoders()
         if self.normalize:
-            self._normalize_modalities()
+            self.normalize_modalities(range(len(self.cases)))
 
     def _load_cases(self) -> None:
         systems_seen = {}
@@ -208,14 +208,15 @@ class RCAEvalDataset(Dataset):
         self.service_encoder.fit([case.root_cause_service for case in self.cases])
         self.fault_encoder.fit([case.fault_type for case in self.cases])
 
-    def _normalize_modalities(self) -> None:
+    def normalize_modalities(self, fit_indices: Sequence[int]) -> None:
+        fit_index_set = set(fit_indices)
         for name, scaler in (("metrics", self.metrics_scaler), ("logs", self.logs_scaler), ("traces", self.traces_scaler)):
             arrays = [getattr(case, name) for case in self.cases if getattr(case, name) is not None and getattr(case, name).shape[0] > 0]
             if not arrays:
                 continue
             max_dim = max(array.shape[1] for array in arrays)
-            stacked = []
-            for case in self.cases:
+            fit_arrays = []
+            for index, case in enumerate(self.cases):
                 array = getattr(case, name)
                 if array is None or array.shape[0] == 0:
                     continue
@@ -223,14 +224,18 @@ class RCAEvalDataset(Dataset):
                     pad = np.zeros((array.shape[0], max_dim - array.shape[1]), dtype=np.float32)
                     array = np.concatenate([array, pad], axis=1)
                     setattr(case, name, array)
-                stacked.append(array)
-            scaler.fit(np.concatenate(stacked, axis=0))
+                if index in fit_index_set:
+                    fit_arrays.append(array)
+            if not fit_arrays:
+                raise ValueError(f"No training cases contain the {name} modality.")
+            scaler.fit(np.concatenate(fit_arrays, axis=0))
             for case in self.cases:
                 array = getattr(case, name)
                 if array is not None and array.shape[0] > 0:
                     normalized = scaler.transform(array).astype(np.float32)
                     setattr(case, name, normalized)
                     self.input_dims[name] = normalized.shape[1]
+        self.normalize = True
 
     def __len__(self) -> int:
         return len(self.cases)

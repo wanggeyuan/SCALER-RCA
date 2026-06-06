@@ -61,6 +61,7 @@ def main() -> None:
         include_modalities=config.include_modalities,
         systems=config.systems,
         max_cases_per_system=config.max_cases_per_system,
+        normalize=False,
     )
     train_idx, _, test_idx = create_splits(
         dataset,
@@ -69,6 +70,7 @@ def main() -> None:
         config.seed,
         stratify_by=config.split_stratify_by,
     )
+    dataset.normalize_modalities(train_idx)
     loader = DataLoader(Subset(dataset, test_idx), batch_size=config.eval_batch_size, shuffle=False, collate_fn=collate_rca_batch)
     candidate_sets = checkpoint.get("service_candidate_sets") or build_service_candidate_sets(dataset, train_idx)
     service_class_weights = torch.tensor(checkpoint.get("service_class_weights", [1.0] * len(checkpoint["service_classes"])))

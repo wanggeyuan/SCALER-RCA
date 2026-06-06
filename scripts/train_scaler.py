@@ -103,6 +103,7 @@ def run_training(
         include_modalities=config.include_modalities,
         systems=config.systems,
         max_cases_per_system=config.max_cases_per_system,
+        normalize=False,
     )
     train_idx, val_idx, test_idx = create_splits(
         dataset,
@@ -111,6 +112,7 @@ def run_training(
         config.seed,
         stratify_by=config.split_stratify_by,
     )
+    dataset.normalize_modalities(train_idx)
     train_loader = DataLoader(Subset(dataset, train_idx), batch_size=config.batch_size, shuffle=True, collate_fn=collate_rca_batch)
     val_loader = DataLoader(Subset(dataset, val_idx), batch_size=config.eval_batch_size, shuffle=False, collate_fn=collate_rca_batch)
     test_loader = DataLoader(Subset(dataset, test_idx), batch_size=config.eval_batch_size, shuffle=False, collate_fn=collate_rca_batch)
