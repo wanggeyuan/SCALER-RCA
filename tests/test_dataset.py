@@ -27,3 +27,18 @@ def test_dataset_loads_minimal_rcaeval_tree(tmp_path: Path):
     assert "service_label" in sample
     assert sample["fault_text"].startswith("system")
 
+
+def test_dataset_ignores_empty_modalities(tmp_path: Path):
+    case_dir = tmp_path / "RE2" / "RE2-SS" / "orders_f1" / "0"
+    case_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"time": [1, 2], "a": [0.1, 0.2]}).to_csv(case_dir / "metrics.csv", index=False)
+    pd.DataFrame({"time": [], "msg": [], "value": []}).to_csv(case_dir / "logts.csv", index=False)
+    pd.DataFrame({"time": [], "lat": []}).to_csv(case_dir / "tracets_lat.csv", index=False)
+    pd.DataFrame({"time": [], "err": []}).to_csv(case_dir / "tracets_err.csv", index=False)
+
+    dataset = RCAEvalDataset(data_root=tmp_path, stages=["RE2"], max_cases_per_system=1)
+    sample = dataset[0]
+
+    assert "metrics" in sample["data"]
+    assert "logs" not in sample["data"]
+    assert "traces" not in sample["data"]

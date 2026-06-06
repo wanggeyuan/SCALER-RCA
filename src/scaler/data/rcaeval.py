@@ -104,27 +104,35 @@ class RCAEvalDataset(Dataset):
         if "metrics" in self.include_modalities:
             metrics_file = exp_dir / ("data.csv" if case.stage == "RE1" else "metrics.csv")
             if metrics_file.exists():
-                case.metrics = self._load_numeric_csv(metrics_file)
+                case.metrics = self._sanitize_array(self._load_numeric_csv(metrics_file))
 
         if "logs" in self.include_modalities and case.stage in {"RE2", "RE3"}:
             logs_file = exp_dir / ("logts.csv" if case.stage == "RE2" else "logs.csv")
             if logs_file.exists():
-                case.logs = self._load_mixed_csv(logs_file)
+                case.logs = self._sanitize_array(self._load_mixed_csv(logs_file))
 
         if "traces" in self.include_modalities and case.stage in {"RE2", "RE3"}:
             if case.stage == "RE2":
                 lat_file = exp_dir / "tracets_lat.csv"
                 err_file = exp_dir / "tracets_err.csv"
                 if lat_file.exists():
-                    case.traces = self._load_re2_traces(lat_file, err_file)
+                    case.traces = self._sanitize_array(self._load_re2_traces(lat_file, err_file))
             else:
                 traces_file = exp_dir / "traces.csv"
                 if traces_file.exists():
-                    case.traces = self._load_mixed_csv(traces_file)
+                    case.traces = self._sanitize_array(self._load_mixed_csv(traces_file))
 
     @staticmethod
     def _build_fault_text(system: str, fault_type: str) -> str:
         return f"system {system}; fault {fault_type}"
+
+    @staticmethod
+    def _sanitize_array(array: np.ndarray) -> Optional[np.ndarray]:
+        if array.ndim != 2:
+            return array
+        if array.shape[0] == 0 or array.shape[1] == 0:
+            return None
+        return array
 
     @staticmethod
     def _load_numeric_csv(path: Path) -> np.ndarray:
@@ -181,14 +189,14 @@ class RCAEvalDataset(Dataset):
 
     def _normalize_modalities(self) -> None:
         for name, scaler in (("metrics", self.metrics_scaler), ("logs", self.logs_scaler), ("traces", self.traces_scaler)):
-            arrays = [getattr(case, name) for case in self.cases if getattr(case, name) is not None]
+            arrays = [getattr(case, name) for case in self.cases if getattr(case, name) is not None and getattr(case, name).shape[0] > 0]
             if not arrays:
                 continue
             max_dim = max(array.shape[1] for array in arrays)
             stacked = []
             for case in self.cases:
                 array = getattr(case, name)
-                if array is None:
+                if array is None or array.shape[0] == 0:
                     continue
                 if array.shape[1] < max_dim:
                     pad = np.zeros((array.shape[0], max_dim - array.shape[1]), dtype=np.float32)
@@ -198,7 +206,7 @@ class RCAEvalDataset(Dataset):
             scaler.fit(np.concatenate(stacked, axis=0))
             for case in self.cases:
                 array = getattr(case, name)
-                if array is not None:
+                if array is not None and array.shape[0] > 0:
                     normalized = scaler.transform(array).astype(np.float32)
                     setattr(case, name, normalized)
                     self.input_dims[name] = normalized.shape[1]
