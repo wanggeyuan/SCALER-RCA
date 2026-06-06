@@ -91,6 +91,25 @@ def run_training(
     device = select_device(preferred_device)
     logger.info("Using device: %s", describe_device(device))
     logger.info("Loaded %d RCAEval cases", len(dataset))
+    # Log text encoder backend and cache status
+    anchor_encoder = model.semantic_alignment.anchor_encoder
+    logger.info(
+        "Text encoder backend: %s (model=%s, allow_download=%s, fallback_reason=%s)",
+        anchor_encoder.backend,
+        config.text_encoder.model_name,
+        config.text_encoder.allow_download,
+        getattr(anchor_encoder, "_fallback_reason", None) or "N/A",
+    )
+    # Log modality availability stats
+    modality_counts = {"metrics": 0, "logs": 0, "traces": 0}
+    for case in dataset.cases:
+        for name in modality_counts:
+            if getattr(case, name) is not None:
+                modality_counts[name] += 1
+    logger.info("Modality coverage: metrics=%d/%d, logs=%d/%d, traces=%d/%d",
+                modality_counts["metrics"], len(dataset),
+                modality_counts["logs"], len(dataset),
+                modality_counts["traces"], len(dataset))
     model.to(device)
     optimizer = AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
     scheduler = ComplexityScheduler(

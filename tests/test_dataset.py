@@ -25,7 +25,7 @@ def test_dataset_loads_minimal_rcaeval_tree(tmp_path: Path):
     assert len(dataset) >= 2
     sample = dataset[0]
     assert "service_label" in sample
-    assert sample["fault_text"].startswith("system")
+    assert "cpu" in sample["fault_text"].lower() or "delay" in sample["fault_text"].lower() or "mem" in sample["fault_text"].lower() or "loss" in sample["fault_text"].lower()
 
 
 def test_dataset_ignores_empty_modalities(tmp_path: Path):

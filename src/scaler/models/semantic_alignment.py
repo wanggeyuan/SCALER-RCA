@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from typing import Dict, List
 
 import torch
@@ -8,6 +9,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from scaler.config import TextEncoderConfig
+
+logger = logging.getLogger("scaler")
 
 
 class HashedTextEncoder(nn.Module):
@@ -48,19 +51,35 @@ class TextAnchorEncoder(nn.Module):
         self.hashed = HashedTextEncoder(output_dim, max_tokens=config.max_tokens)
         self.transformer_model = None
         self.transformer_tokenizer = None
+        self._fallback_reason = None
         if config.backend in {"auto", "transformers"}:
             try:
                 from transformers import AutoModel, AutoTokenizer
 
                 local_files_only = not config.allow_download
+                logger.info(
+                    "Loading text encoder '%s' (local_files_only=%s, allow_download=%s)...",
+                    config.model_name,
+                    local_files_only,
+                    config.allow_download,
+                )
                 self.transformer_tokenizer = AutoTokenizer.from_pretrained(config.model_name, local_files_only=local_files_only)
                 self.transformer_model = AutoModel.from_pretrained(config.model_name, local_files_only=local_files_only)
                 hidden = self.transformer_model.config.hidden_size
                 self.transformer_proj = nn.Linear(hidden, output_dim)
                 self.backend = "transformers"
-            except Exception:
+                logger.info("Text encoder backend: transformers (model=%s, hidden=%d, output=%d)", config.model_name, hidden, output_dim)
+            except Exception as exc:
                 self.transformer_model = None
                 self.transformer_tokenizer = None
+                self._fallback_reason = f"{type(exc).__name__}: {exc}"
+                logger.warning(
+                    "Failed to load transformers backend for '%s': %s. Falling back to hashed encoder.",
+                    config.model_name,
+                    self._fallback_reason,
+                )
+        if self.backend == "hashed":
+            logger.info("Text encoder backend: hashed (embedding_dim=%d, max_tokens=%d)", output_dim, config.max_tokens)
 
     def forward(self, texts: List[str], device: torch.device) -> torch.Tensor:
         if self.backend == "transformers" and self.transformer_model is not None and self.transformer_tokenizer is not None:

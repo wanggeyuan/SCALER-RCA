@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
@@ -124,7 +125,16 @@ class RCAEvalDataset(Dataset):
 
     @staticmethod
     def _build_fault_text(system: str, fault_type: str) -> str:
-        return f"system {system}; fault {fault_type}"
+        fault_descriptions = {
+            "cpu": "CPU overload causing high utilization and potential throttling of service requests",
+            "mem": "memory pressure leading to out-of-memory errors and increased garbage collection latency",
+            "delay": "network latency injection causing delayed response times and timeout errors between services",
+            "loss": "packet loss in the network causing intermittent connection failures and retry storms",
+            "disk": "disk I/O bottleneck causing slow read and write operations on persistent storage",
+            "socket": "socket connection errors leading to failed inter-service communication and dropped requests",
+        }
+        desc = fault_descriptions.get(fault_type, f"fault type {fault_type} affecting system performance")
+        return f"{system}: {desc}"
 
     @staticmethod
     def _sanitize_array(array: np.ndarray) -> Optional[np.ndarray]:
@@ -142,6 +152,15 @@ class RCAEvalDataset(Dataset):
         return frame.values.astype(np.float32)
 
     @staticmethod
+    def _hash_text_column(series: pd.Series) -> np.ndarray:
+        values = series.astype(str).to_numpy()
+        hashed = np.empty(len(values), dtype=np.float32)
+        for i, val in enumerate(values):
+            digest = hashlib.md5(val.encode("utf-8")).hexdigest()
+            hashed[i] = float(int(digest[:8], 16)) / float(0xFFFFFFFF)
+        return hashed
+
+    @staticmethod
     def _load_mixed_csv(path: Path, max_rows: int = 1000) -> np.ndarray:
         frame = pd.read_csv(path, nrows=max_rows).fillna(0)
         if "time" in frame.columns:
@@ -152,7 +171,7 @@ class RCAEvalDataset(Dataset):
             if is_numeric_dtype(series.dtype):
                 features.append(series.astype(np.float32).to_numpy())
             else:
-                features.append(series.astype(str).str.len().astype(np.float32).to_numpy())
+                features.append(RCAEvalDataset._hash_text_column(series))
         if not features:
             return np.zeros((1, 1), dtype=np.float32)
         return np.column_stack(features).astype(np.float32)
