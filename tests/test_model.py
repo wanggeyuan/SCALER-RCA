@@ -8,6 +8,33 @@ from scaler.models.fusion import DynamicFusion
 from scaler.models.semantic_alignment import SemanticAlignmentModule, TextAnchorEncoder
 
 
+def test_service_fusion_head_starts_as_zero_residual():
+    config = SCALERExperimentConfig(
+        hidden_dim=16,
+        projection_dim=16,
+        dropout=0.0,
+        semantic_alignment_enabled=False,
+        dynamic_fusion_enabled=False,
+        text_encoder=TextEncoderConfig(backend="hashed", max_tokens=8),
+    )
+    model = SCALERModel(
+        input_dims={"metrics": 3, "logs": 2, "traces": 2},
+        num_services=4,
+        num_fault_types=2,
+        config=config,
+    )
+    batch = {
+        "metrics": torch.randn(2, 5, 3),
+        "metrics_mask": torch.ones(2, dtype=torch.long),
+        "metrics_lengths": torch.full((2,), 5, dtype=torch.long),
+        "fault_texts": ["RE1-SS: cpu fault", "RE1-OB: delay fault"],
+    }
+
+    logits = model(batch)["service_logits"]
+
+    torch.testing.assert_close(logits, torch.zeros_like(logits))
+
+
 def test_dynamic_fusion_preserves_mean_context_when_dynamic_branch_is_zero():
     fusion = DynamicFusion(hidden_dim=16, dropout=0.0)
     for parameter in fusion.parameters():

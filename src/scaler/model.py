@@ -88,6 +88,8 @@ class SCALERModel(nn.Module):
             nn.Dropout(config.dropout),
             nn.Linear(hidden_dim, num_services),
         )
+        nn.init.zeros_(self.service_head[-1].weight)
+        nn.init.zeros_(self.service_head[-1].bias)
         self.fault_head = nn.Sequential(
             nn.Linear(config.projection_dim, hidden_dim),
             nn.ReLU(),
