@@ -126,17 +126,16 @@ class SemanticAlignmentModule(nn.Module):
         aligned: Dict[str, torch.Tensor] = {}
         ordered_names = [name for name in ("metrics", "logs", "traces") if name in modality_embeddings]
         anchor_token = anchor.unsqueeze(1)
-        projected_tokens = []
+        pre_cross: Dict[str, torch.Tensor] = {}
         for name in ordered_names:
-            projected = self.modal_projections[name](modality_embeddings[name])
-            attended, _ = self.anchor_attention(projected.unsqueeze(1), anchor_token, anchor_token)
-            aligned[name] = projected + attended.squeeze(1)
-            projected_tokens.append(aligned[name])
+            mod_proj = self.modal_projections[name](modality_embeddings[name])
+            attended, _ = self.anchor_attention(mod_proj.unsqueeze(1), anchor_token, anchor_token)
+            pre_cross[name] = mod_proj + attended.squeeze(1)
 
-        stacked = torch.stack(projected_tokens, dim=1)
+        stacked = torch.stack(list(pre_cross.values()), dim=1)
         cross_modal, _ = self.cross_modal_attention(stacked, stacked, stacked)
         for idx, name in enumerate(ordered_names):
-            aligned[name] = cross_modal[:, idx, :]
+            aligned[name] = pre_cross[name] + cross_modal[:, idx, :]
 
         concat = []
         for name in ("metrics", "logs", "traces"):
