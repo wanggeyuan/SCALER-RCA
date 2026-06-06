@@ -70,6 +70,8 @@ class SCALERExperimentConfig:
     semantic_alignment_enabled: bool = True
     dynamic_fusion_enabled: bool = True
     curriculum_enabled: bool = True
+    metrics_statistics_head_enabled: bool = False
+    metrics_statistics_head_weight: float = 1.0
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "SCALERExperimentConfig":

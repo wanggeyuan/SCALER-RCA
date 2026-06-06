@@ -12,6 +12,22 @@ from scaler.models.fusion import DynamicFusion
 from scaler.models.semantic_alignment import SemanticAlignmentModule
 
 
+def _temporal_statistics(x: torch.Tensor, lengths: torch.Tensor | None) -> torch.Tensor:
+    if lengths is None:
+        valid = torch.ones(x.shape[:2], dtype=torch.bool, device=x.device)
+    else:
+        positions = torch.arange(x.size(1), device=x.device).unsqueeze(0)
+        safe_lengths = lengths.to(x.device).clamp(min=1, max=x.size(1))
+        valid = positions >= (x.size(1) - safe_lengths).unsqueeze(1)
+    mask = valid.unsqueeze(-1)
+    count = mask.sum(dim=1).clamp_min(1)
+    mean = (x * mask).sum(dim=1) / count
+    variance = (((x - mean.unsqueeze(1)) ** 2) * mask).sum(dim=1) / count
+    maximum = x.masked_fill(~mask, torch.finfo(x.dtype).min).max(dim=1).values
+    last = x[:, -1, :]
+    return torch.cat([mean, variance.sqrt(), maximum, last], dim=-1)
+
+
 def _pairwise_cosine_loss(vectors: List[torch.Tensor], masks: List[torch.Tensor] | None = None) -> torch.Tensor:
     if len(vectors) < 2:
         return vectors[0].new_tensor(0.0)
@@ -78,6 +94,11 @@ class SCALERModel(nn.Module):
             nn.Dropout(config.dropout),
             nn.Linear(hidden_dim, num_fault_types),
         )
+        self.metrics_statistics_head = (
+            nn.Linear(input_dims["metrics"] * 4, num_services)
+            if config.metrics_statistics_head_enabled
+            else None
+        )
 
     def encode_modalities(self, batch: Dict[str, object]) -> Dict[str, torch.Tensor]:
         encoded = {}
@@ -115,6 +136,12 @@ class SCALERModel(nn.Module):
             strategy_weights = torch.ones(fused.size(0), 1, device=fused.device)
 
         service_logits = self.service_head(fused)
+        statistics_logits = None
+        if self.metrics_statistics_head is not None and "metrics" in batch:
+            statistics = _temporal_statistics(batch["metrics"], batch.get("metrics_lengths"))
+            statistics_logits = self.metrics_statistics_head(statistics)
+            metrics_mask = batch["metrics_mask"].to(statistics_logits.device).unsqueeze(-1)
+            service_logits = service_logits + self.config.metrics_statistics_head_weight * statistics_logits * metrics_mask
         if "service_candidate_mask" in batch:
             candidate_mask = batch["service_candidate_mask"].to(service_logits.device).bool()
             service_logits = service_logits.masked_fill(~candidate_mask, torch.finfo(service_logits.dtype).min)
@@ -124,6 +151,7 @@ class SCALERModel(nn.Module):
             "service_logits": service_logits,
             "fault_logits": fault_logits,
             "service_probs": torch.softmax(service_logits, dim=-1),
+            "metrics_statistics_logits": statistics_logits,
             "fault_probs": torch.softmax(fault_logits, dim=-1),
             "projected": projected,
             "aligned": aligned,
