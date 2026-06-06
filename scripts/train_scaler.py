@@ -24,6 +24,7 @@ except Exception:
 import numpy as np
 import torch
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader, Subset
 
 from scaler.config import SCALERExperimentConfig
@@ -122,6 +123,12 @@ def run_training(
                 modality_counts["traces"], len(dataset))
     model.to(device)
     optimizer = AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
+    if config.warmup_epochs > 0:
+        warmup_steps = config.warmup_epochs * len(train_loader)
+        lr_lambda = lambda step: min(1.0, (step + 1) / warmup_steps)
+        lr_scheduler = LambdaLR(optimizer, lr_lambda)
+    else:
+        lr_scheduler = None
     scheduler = ComplexityScheduler(
         threshold=config.curriculum.initial_threshold,
         min_threshold=config.curriculum.min_threshold,
@@ -153,6 +160,8 @@ def run_training(
             loss_dict["total_loss"].backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
+            if lr_scheduler is not None:
+                lr_scheduler.step()
             epoch_losses.append(float(loss_dict["total_loss"].item()))
         val_metrics = _evaluate(model, val_loader, device, config.max_eval_batches)
         scheduler.update(val_metrics["PR@1"])

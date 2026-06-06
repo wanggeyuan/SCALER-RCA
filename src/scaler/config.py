@@ -38,6 +38,7 @@ class SCALERExperimentConfig:
     hidden_dim: int = 128
     projection_dim: int = 128
     dropout: float = 0.1
+    warmup_epochs: int = 0
     max_sequence_length: int = 256
     train_fraction: float = 0.7
     val_fraction: float = 0.15
