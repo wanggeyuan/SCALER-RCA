@@ -23,7 +23,7 @@ class ComplexityScheduler:
             return
         self.wait += 1
         if self.wait >= self.patience:
-            self.threshold = max(self.threshold - self.step_size, self.min_threshold)
+            self.threshold = min(self.threshold + self.step_size, self.max_threshold)
             self.wait = 0
 
     def weights(self, scores: torch.Tensor) -> torch.Tensor:
@@ -65,4 +65,3 @@ def compute_batch_complexity(batch: Dict[str, object]) -> torch.Tensor:
         complexity.append((fault_weights[index] + modal_weight + temporal_weight + scope_weight) / 4.0)
 
     return torch.tensor(complexity, dtype=torch.float32)
-
