@@ -42,6 +42,7 @@ class DynamicFusion(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
         )
+        self.residual_logit = nn.Parameter(torch.tensor(-2.0))
 
     def _ordered_stack(self, aligned: Dict[str, torch.Tensor]) -> torch.Tensor:
         first = next(iter(aligned.values()))
@@ -74,8 +75,9 @@ class DynamicFusion(nn.Module):
 
         strategies = torch.stack([mean_fused, attention_fused, gated_fused, expert_fused], dim=1)
         fused = (strategies * strategy_weights.unsqueeze(-1)).sum(dim=1)
+        fused = context + torch.sigmoid(self.residual_logit) * self.output_projection(fused)
         return {
-            "fused": self.output_projection(fused),
+            "fused": fused,
             "strategy_weights": strategy_weights,
             "modality_weights": modality_weights,
         }

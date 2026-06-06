@@ -4,7 +4,26 @@ from types import SimpleNamespace
 
 from scaler.config import SCALERExperimentConfig, TextEncoderConfig
 from scaler.model import SCALERModel
+from scaler.models.fusion import DynamicFusion
 from scaler.models.semantic_alignment import SemanticAlignmentModule, TextAnchorEncoder
+
+
+def test_dynamic_fusion_preserves_mean_context_when_dynamic_branch_is_zero():
+    fusion = DynamicFusion(hidden_dim=16, dropout=0.0)
+    for parameter in fusion.parameters():
+        torch.nn.init.zeros_(parameter)
+    aligned = {
+        "metrics": torch.full((2, 16), 1.0),
+        "logs": torch.full((2, 16), 3.0),
+    }
+    masks = {
+        "metrics": torch.ones(2, dtype=torch.long),
+        "logs": torch.ones(2, dtype=torch.long),
+    }
+
+    output = fusion(aligned, masks)["fused"]
+
+    torch.testing.assert_close(output, torch.full((2, 16), 2.0))
 
 
 def test_transformer_text_anchor_ignores_padding_and_stays_frozen():
