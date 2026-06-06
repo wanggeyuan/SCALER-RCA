@@ -31,7 +31,11 @@ class MetricsEncoder(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
         )
-        self.stats_residual_logit = nn.Parameter(torch.tensor(-2.0))
+        self.fusion = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+        )
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor, lengths: torch.Tensor | None = None) -> torch.Tensor:
@@ -49,7 +53,7 @@ class MetricsEncoder(nn.Module):
         last = x[:, -1, :]
         stats_embedding = self.stats_proj(torch.cat([mean, std, maximum, last], dim=-1))
 
-        return temporal_embedding + torch.sigmoid(self.stats_residual_logit) * stats_embedding
+        return self.fusion(torch.cat([temporal_embedding, stats_embedding], dim=-1))
 
 
 class PositionalEncoding(nn.Module):
