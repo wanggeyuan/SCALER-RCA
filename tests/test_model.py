@@ -2,6 +2,7 @@ import torch
 
 from scaler.config import SCALERExperimentConfig, TextEncoderConfig
 from scaler.model import SCALERModel
+from scaler.models.semantic_alignment import SemanticAlignmentModule
 
 
 def test_missing_modality_padding_does_not_change_predictions():
@@ -119,3 +120,20 @@ def test_contrastive_loss_uses_projected_embeddings():
     mismatching_loss = model.compute_losses(mismatching, batch)["contrastive_loss"]
 
     assert matching_loss < mismatching_loss
+
+
+def test_semantic_alignment_preserves_modality_residual():
+    module = SemanticAlignmentModule(
+        hidden_dim=16,
+        anchor_config=TextEncoderConfig(backend="hashed", max_tokens=8),
+        dropout=0.0,
+    )
+    for parameter in module.parameters():
+        torch.nn.init.zeros_(parameter)
+    embeddings = {"metrics": torch.randn(2, 16), "logs": torch.randn(2, 16)}
+    masks = {"metrics": torch.ones(2, dtype=torch.long), "logs": torch.ones(2, dtype=torch.long)}
+
+    aligned = module(embeddings, ["cpu fault", "delay fault"], masks)["aligned"]
+
+    torch.testing.assert_close(aligned["metrics"], embeddings["metrics"])
+    torch.testing.assert_close(aligned["logs"], embeddings["logs"])

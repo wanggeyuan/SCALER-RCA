@@ -108,8 +108,12 @@ class SemanticAlignmentModule(nn.Module):
         super().__init__()
         self.anchor_encoder = TextAnchorEncoder(anchor_config, hidden_dim)
         self.modal_projections = nn.ModuleDict({name: nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.ReLU(), nn.Dropout(dropout)) for name in ("metrics", "logs", "traces")})
+        self.anchor_gates = nn.ModuleDict(
+            {name: nn.Sequential(nn.Linear(hidden_dim * 2, hidden_dim), nn.Sigmoid()) for name in ("metrics", "logs", "traces")}
+        )
         self.anchor_attention = nn.MultiheadAttention(embed_dim=hidden_dim, num_heads=4, batch_first=True, dropout=dropout)
         self.cross_modal_attention = nn.MultiheadAttention(embed_dim=hidden_dim, num_heads=8, batch_first=True, dropout=dropout)
+        self.residual_logit = nn.Parameter(torch.tensor(-2.0))
         self.consistency_head = nn.Sequential(
             nn.Linear(hidden_dim * 3, hidden_dim),
             nn.ReLU(),
@@ -135,13 +139,17 @@ class SemanticAlignmentModule(nn.Module):
         for name in ordered_names:
             mod_proj = self.modal_projections[name](modality_embeddings[name])
             attended, _ = self.anchor_attention(mod_proj.unsqueeze(1), anchor_token, anchor_token)
-            pre_cross[name] = (mod_proj + attended.squeeze(1)) * modality_masks[name].unsqueeze(-1)
+            anchor_delta = attended.squeeze(1)
+            anchor_gate = self.anchor_gates[name](torch.cat([mod_proj, anchor], dim=-1))
+            pre_cross[name] = (mod_proj + anchor_gate * anchor_delta) * modality_masks[name].unsqueeze(-1)
 
         stacked = torch.stack(list(pre_cross.values()), dim=1)
         missing = torch.stack([~modality_masks[name].bool() for name in ordered_names], dim=1)
         cross_modal, _ = self.cross_modal_attention(stacked, stacked, stacked, key_padding_mask=missing)
+        residual_scale = torch.sigmoid(self.residual_logit)
         for idx, name in enumerate(ordered_names):
-            aligned[name] = (pre_cross[name] + cross_modal[:, idx, :]) * modality_masks[name].unsqueeze(-1)
+            semantic_delta = pre_cross[name] + cross_modal[:, idx, :]
+            aligned[name] = (modality_embeddings[name] + residual_scale * semantic_delta) * modality_masks[name].unsqueeze(-1)
 
         concat = []
         for name in ("metrics", "logs", "traces"):
