@@ -133,6 +133,8 @@ def run_training(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     history = []
+    best_val_pr1 = -1.0
+    best_state_dict = None
     for epoch in range(config.epochs):
         model.train()
         epoch_losses = []
@@ -171,7 +173,14 @@ def run_training(
             val_metrics["MRR"],
             epoch_record["seconds"],
         )
+        if val_metrics["PR@1"] > best_val_pr1:
+            best_val_pr1 = val_metrics["PR@1"]
+            best_state_dict = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            logger.info("New best val_PR@1: %.4f (epoch %d)", best_val_pr1, epoch + 1)
 
+    if best_state_dict is not None:
+        model.load_state_dict(best_state_dict)
+        logger.info("Loaded best checkpoint (val_PR@1=%.4f) for test evaluation", best_val_pr1)
     test_metrics = _evaluate(model, test_loader, device, config.max_eval_batches)
     checkpoint_path = output_dir / checkpoint_name
     torch.save(

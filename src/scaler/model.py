@@ -118,8 +118,7 @@ class SCALERModel(nn.Module):
             fault_loss = fault_loss.mean()
 
         aligned_values = list(outputs["aligned"].values())
-        projected_values = list(outputs["projected"].values())
-        contrastive_loss = _contrastive_loss(projected_values)
+        contrastive_loss = _contrastive_loss(aligned_values)
         alignment_loss = _pairwise_cosine_loss(aligned_values)
         consistency_loss = 1.0 - outputs["consistency_score"].mean()
         fusion_loss = (outputs["strategy_weights"] ** 2).sum(dim=-1).mean()
