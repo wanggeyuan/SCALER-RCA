@@ -7,6 +7,14 @@ import torch.nn as nn
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
 
+def _valid_time_mask(x: torch.Tensor, lengths: torch.Tensor | None) -> torch.Tensor:
+    if lengths is None:
+        return torch.ones(x.shape[:2], dtype=torch.bool, device=x.device)
+    safe_lengths = lengths.to(x.device).clamp(min=1, max=x.size(1))
+    positions = torch.arange(x.size(1), device=x.device).unsqueeze(0)
+    return positions >= (x.size(1) - safe_lengths).unsqueeze(1)
+
+
 class MetricsEncoder(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, dropout: float = 0.1) -> None:
         super().__init__()
@@ -20,7 +28,8 @@ class MetricsEncoder(nn.Module):
         self.proj = nn.Linear(hidden_dim * 2, hidden_dim)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, lengths: torch.Tensor | None = None) -> torch.Tensor:
+        x = x * _valid_time_mask(x, lengths).unsqueeze(-1)
         x = self.cnn(x.transpose(1, 2)).transpose(1, 2)
         encoded, _ = self.lstm(x)
         return self.dropout(self.proj(encoded[:, -1, :]))
@@ -57,11 +66,14 @@ class LogsEncoder(nn.Module):
         self.output_proj = nn.Linear(hidden_dim, hidden_dim)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, lengths: torch.Tensor | None = None) -> torch.Tensor:
+        valid = _valid_time_mask(x, lengths)
+        x = x * valid.unsqueeze(-1)
         x = self.input_proj(x)
         x = self.positional_encoding(x)
-        x = self.transformer(x)
-        return self.dropout(self.output_proj(x.mean(dim=1)))
+        x = self.transformer(x, src_key_padding_mask=~valid)
+        pooled = (x * valid.unsqueeze(-1)).sum(dim=1) / valid.sum(dim=1, keepdim=True)
+        return self.dropout(self.output_proj(pooled))
 
 
 class TracesEncoder(nn.Module):
@@ -83,12 +95,14 @@ class TracesEncoder(nn.Module):
         self.output_proj = nn.Linear(hidden_dim * 2, hidden_dim)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, lengths: torch.Tensor | None = None) -> torch.Tensor:
+        valid = _valid_time_mask(x, lengths)
+        x = x * valid.unsqueeze(-1)
         x = self.input_proj(x)
         x = self.conv(x.transpose(1, 2)).transpose(1, 2)
         encoded, _ = self.lstm(x)
         attn_logits = self.attn(encoded)
+        attn_logits = attn_logits.masked_fill(~valid.unsqueeze(-1), torch.finfo(attn_logits.dtype).min)
         attn_weights = torch.softmax(attn_logits, dim=1)
         pooled = (encoded * attn_weights).sum(dim=1)
         return self.dropout(self.output_proj(pooled))
-

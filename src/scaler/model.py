@@ -85,7 +85,7 @@ class SCALERModel(nn.Module):
             if name not in batch:
                 continue
             mask = batch[f"{name}_mask"].to(batch[name].device).unsqueeze(-1)
-            encoded[name] = encoder(batch[name]) * mask
+            encoded[name] = encoder(batch[name], batch.get(f"{name}_lengths")) * mask
         return encoded
 
     def forward(self, batch: Dict[str, object]) -> Dict[str, torch.Tensor]:
