@@ -141,7 +141,9 @@ class SCALERModel(nn.Module):
 
         aligned_values = list(outputs["aligned"].values())
         aligned_masks = [batch[f"{name}_mask"].to(aligned_values[0].device) for name in outputs["aligned"]]
-        contrastive_loss = _contrastive_loss(aligned_values, aligned_masks)
+        projected_values = list(outputs["projected"].values())
+        projected_masks = [batch[f"{name}_mask"].to(projected_values[0].device) for name in outputs["projected"]]
+        contrastive_loss = _contrastive_loss(projected_values, projected_masks)
         alignment_loss = _pairwise_cosine_loss(aligned_values, aligned_masks)
         consistency_loss = 1.0 - outputs["consistency_score"].mean()
         fusion_loss = (outputs["strategy_weights"] ** 2).sum(dim=-1).mean()
