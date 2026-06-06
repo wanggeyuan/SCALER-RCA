@@ -88,6 +88,7 @@ class TextAnchorEncoder(nn.Module):
     def forward(self, texts: List[str], device: torch.device) -> torch.Tensor:
         if self.backend == "transformers" and self.transformer_model is not None and self.transformer_tokenizer is not None:
             self.transformer_model = self.transformer_model.to(device)
+            self.transformer_model.eval()
             encoded = self.transformer_tokenizer(
                 texts,
                 padding=True,
@@ -98,7 +99,8 @@ class TextAnchorEncoder(nn.Module):
             encoded = {key: value.to(device) for key, value in encoded.items()}
             with torch.no_grad():
                 outputs = self.transformer_model(**encoded)
-            pooled = outputs.last_hidden_state.mean(dim=1)
+            attention_mask = encoded["attention_mask"].unsqueeze(-1)
+            pooled = (outputs.last_hidden_state * attention_mask).sum(dim=1) / attention_mask.sum(dim=1).clamp_min(1)
             return self.transformer_proj(pooled)
         return self.hashed(texts, device)
 

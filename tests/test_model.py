@@ -1,8 +1,36 @@
 import torch
+import torch.nn as nn
+from types import SimpleNamespace
 
 from scaler.config import SCALERExperimentConfig, TextEncoderConfig
 from scaler.model import SCALERModel
-from scaler.models.semantic_alignment import SemanticAlignmentModule
+from scaler.models.semantic_alignment import SemanticAlignmentModule, TextAnchorEncoder
+
+
+def test_transformer_text_anchor_ignores_padding_and_stays_frozen():
+    class FakeTokenizer:
+        def __call__(self, *args, **kwargs):
+            return {
+                "input_ids": torch.tensor([[1, 2, 0], [3, 0, 0]]),
+                "attention_mask": torch.tensor([[1, 1, 0], [1, 0, 0]]),
+            }
+
+    class FakeTransformer(nn.Module):
+        def forward(self, input_ids, attention_mask):
+            hidden = torch.tensor([[[1.0] * 8, [3.0] * 8, [100.0] * 8], [[7.0] * 8, [100.0] * 8, [100.0] * 8]])
+            return SimpleNamespace(last_hidden_state=hidden)
+
+    encoder = TextAnchorEncoder(TextEncoderConfig(backend="hashed"), output_dim=8)
+    encoder.backend = "transformers"
+    encoder.transformer_tokenizer = FakeTokenizer()
+    encoder.transformer_model = FakeTransformer()
+    encoder.transformer_proj = nn.Identity()
+    encoder.train()
+
+    anchors = encoder(["first", "second"], device=torch.device("cpu"))
+
+    torch.testing.assert_close(anchors, torch.tensor([[2.0] * 8, [7.0] * 8]))
+    assert not encoder.transformer_model.training
 
 
 def test_metrics_statistics_head_ignores_temporal_padding():
