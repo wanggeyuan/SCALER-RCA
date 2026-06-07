@@ -18,6 +18,13 @@ The main components are:
 
 The commands below run the complete SCALER experiment. A CUDA GPU is recommended; CPU/MPS can run the code but will be much slower.
 
+Clone the repository first:
+
+```bash
+git clone https://github.com/wanggeyuan/SCALER-RCA.git
+cd SCALER-RCA
+```
+
 1. Prepare RCAEval data.
 
 If you already have RCAEval data:
@@ -147,6 +154,21 @@ You can prepare data in two ways:
 
 The download script follows the same RE1/RE2/RE3 Zenodo assets used by the official RCAEval project. Full download takes time and requires several gigabytes of free disk space.
 
+## Environment
+
+The default workflow uses `requirements.txt` and installs the package in editable mode:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+For a pinned dependency set close to the tested local environment:
+
+```bash
+python -m pip install -r requirements-lock.txt
+python -m pip install -e .
+```
+
 ## Running on a Cloud GPU
 
 For a complete run, clone the repository on the server, prepare RCAEval data, and run the same commands in the background:
@@ -187,3 +209,12 @@ It does not include third-party baseline comparison code.
 - `outputs/` is for local run artifacts and is not committed to the repository.
 - `run_scaler.sh` creates and uses a local `.venv` automatically.
 - The default text anchor is a public Hugging Face model (`bert-base-uncased`), with a hashed fallback if transformer weights are unavailable.
+
+## Project Files
+
+- Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Security policy: [SECURITY.md](SECURITY.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Release checklist: [docs/release-checklist.md](docs/release-checklist.md)
+- Citation metadata: [CITATION.cff](CITATION.cff)
+- License: [LICENSE](LICENSE)

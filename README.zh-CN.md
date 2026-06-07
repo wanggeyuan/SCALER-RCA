@@ -20,6 +20,13 @@ SCALER-RCA 是一个面向 RCAEval 数据集的微服务根因定位项目。
 
 下面的命令可以跑完整的 SCALER 实验流程。建议使用 CUDA GPU；CPU/MPS 可以跑通代码，但完整实验会慢很多。
 
+先 clone 仓库：
+
+```bash
+git clone https://github.com/wanggeyuan/SCALER-RCA.git
+cd SCALER-RCA
+```
+
 1. 先准备 RCAEval 数据。
 
 如果你本机已经有 RCAEval 数据：
@@ -149,6 +156,21 @@ RCAEval 数据目录应满足以下结构：
 
 下载脚本使用的是与官方 RCAEval 项目一致的 RE1/RE2/RE3 Zenodo 数据链接。完整下载需要较长时间，并需要数 GB 以上磁盘空间。
 
+## 环境说明
+
+默认流程使用 `requirements.txt`，以 editable 模式安装当前项目：
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+如果希望使用更接近当前测试环境的锁定依赖版本：
+
+```bash
+python -m pip install -r requirements-lock.txt
+python -m pip install -e .
+```
+
 ## 云服务器运行方式
 
 完整实验建议在服务器上 clone 仓库、准备 RCAEval 数据，然后用后台方式运行上面的训练命令：
@@ -189,3 +211,12 @@ tail -f outputs/scaler_run/full/train.log
 - `outputs/` 用于本地运行产物，不会提交到 GitHub。
 - `run_scaler.sh` 会自动创建并使用本地 `.venv` 虚拟环境。
 - 默认文本语义锚点使用公开 Hugging Face 模型 `bert-base-uncased`；如果本地无法加载 transformer 权重，会自动回退到仓库内置的哈希文本编码器。
+
+## 项目文件
+
+- 贡献说明：[CONTRIBUTING.md](CONTRIBUTING.md)
+- 安全说明：[SECURITY.md](SECURITY.md)
+- 更新日志：[CHANGELOG.md](CHANGELOG.md)
+- 发布检查清单：[docs/release-checklist.md](docs/release-checklist.md)
+- 引用元数据：[CITATION.cff](CITATION.cff)
+- 许可证：[LICENSE](LICENSE)

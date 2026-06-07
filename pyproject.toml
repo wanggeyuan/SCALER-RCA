@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "scaler-rca"
 version = "0.1.0"
-description = "Open-source SCALER implementation for the ICWS paper."
+description = "Microservice root cause analysis on RCAEval."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
