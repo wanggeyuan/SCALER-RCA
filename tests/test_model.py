@@ -53,6 +53,44 @@ def test_dynamic_fusion_preserves_mean_context_when_dynamic_branch_is_zero():
     torch.testing.assert_close(output, torch.full((2, 16), 2.0))
 
 
+def test_dynamic_fusion_residual_is_anchored_to_uniform_context():
+    fusion = DynamicFusion(hidden_dim=16, dropout=0.0)
+    for parameter in fusion.output_projection.parameters():
+        torch.nn.init.zeros_(parameter)
+    final_linear = fusion.modality_importance[-1]
+    torch.nn.init.zeros_(final_linear.weight)
+    final_linear.bias.data.copy_(torch.tensor([8.0, -8.0, -8.0]))
+    aligned = {
+        "metrics": torch.full((2, 16), 1.0),
+        "logs": torch.full((2, 16), 3.0),
+    }
+    masks = {
+        "metrics": torch.ones(2, dtype=torch.long),
+        "logs": torch.ones(2, dtype=torch.long),
+    }
+
+    output = fusion(aligned, masks)["fused"]
+
+    torch.testing.assert_close(output, torch.full((2, 16), 2.0))
+
+
+def test_dynamic_fusion_starts_from_uniform_context():
+    torch.manual_seed(7)
+    fusion = DynamicFusion(hidden_dim=16, dropout=0.0)
+    aligned = {
+        "metrics": torch.full((2, 16), 1.0),
+        "logs": torch.full((2, 16), 3.0),
+    }
+    masks = {
+        "metrics": torch.ones(2, dtype=torch.long),
+        "logs": torch.ones(2, dtype=torch.long),
+    }
+
+    output = fusion(aligned, masks)["fused"]
+
+    torch.testing.assert_close(output, torch.full((2, 16), 2.0))
+
+
 def test_transformer_text_anchor_ignores_padding_and_stays_frozen():
     class FakeTokenizer:
         def __call__(self, *args, **kwargs):
