@@ -156,13 +156,15 @@ The download script follows the same RE1/RE2/RE3 Zenodo assets used by the offic
 
 ## Environment
 
+Use Python 3.10, 3.11, or 3.12. The GPU workflow is validated with PyTorch 2.5.x and CUDA 12.4-compatible drivers.
+
 The default workflow uses `requirements.txt` and installs the package in editable mode:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-For a pinned dependency set close to the tested local environment:
+For a pinned dependency set close to the tested Linux/CUDA environment:
 
 ```bash
 python -m pip install -r requirements-lock.txt

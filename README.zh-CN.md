@@ -158,13 +158,15 @@ RCAEval 数据目录应满足以下结构：
 
 ## 环境说明
 
+建议使用 Python 3.10、3.11 或 3.12。GPU 流程已在 PyTorch 2.5.x 和兼容 CUDA 12.4 的驱动环境下验证。
+
 默认流程使用 `requirements.txt`，以 editable 模式安装当前项目：
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-如果希望使用更接近当前测试环境的锁定依赖版本：
+如果希望使用更接近 Linux/CUDA 验证环境的锁定依赖版本：
 
 ```bash
 python -m pip install -r requirements-lock.txt
