@@ -230,6 +230,41 @@ def test_contrastive_loss_uses_projected_embeddings():
     assert matching_loss < mismatching_loss
 
 
+def test_disabling_semantic_alignment_also_disables_semantic_losses():
+    config = SCALERExperimentConfig(
+        hidden_dim=16,
+        projection_dim=16,
+        dropout=0.0,
+        semantic_alignment_enabled=False,
+        text_encoder=TextEncoderConfig(backend="hashed", max_tokens=8),
+    )
+    model = SCALERModel(
+        input_dims={"metrics": 2, "logs": 2, "traces": 2},
+        num_services=2,
+        num_fault_types=2,
+        config=config,
+    )
+    outputs = {
+        "service_logits": torch.zeros(2, 2),
+        "fault_logits": torch.zeros(2, 2),
+        "projected": {"metrics": torch.eye(2, 16), "logs": torch.flip(torch.eye(2, 16), dims=(0,))},
+        "aligned": {"metrics": torch.eye(2, 16), "logs": torch.flip(torch.eye(2, 16), dims=(0,))},
+        "consistency_score": torch.zeros(2),
+        "strategy_weights": torch.full((2, 4), 0.25),
+    }
+    batch = {
+        "service_labels": torch.tensor([0, 1]),
+        "fault_labels": torch.tensor([0, 1]),
+        "metrics_mask": torch.ones(2, dtype=torch.long),
+        "logs_mask": torch.ones(2, dtype=torch.long),
+    }
+
+    losses = model.compute_losses(outputs, batch)
+
+    assert losses["alignment_loss"].item() == 0.0
+    assert losses["consistency_loss"].item() == 0.0
+
+
 def test_semantic_alignment_preserves_modality_residual():
     module = SemanticAlignmentModule(
         hidden_dim=16,
