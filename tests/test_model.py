@@ -320,6 +320,23 @@ def test_semantic_alignment_preserves_modality_residual():
     torch.testing.assert_close(aligned["logs"], embeddings["logs"])
 
 
+def test_semantic_alignment_starts_from_identity():
+    torch.manual_seed(11)
+    module = SemanticAlignmentModule(
+        hidden_dim=16,
+        anchor_config=TextEncoderConfig(backend="hashed", max_tokens=8),
+        dropout=0.0,
+    )
+    module.eval()
+    embeddings = {"metrics": torch.randn(2, 16), "logs": torch.randn(2, 16)}
+    masks = {"metrics": torch.ones(2, dtype=torch.long), "logs": torch.ones(2, dtype=torch.long)}
+
+    aligned = module(embeddings, ["cpu fault", "delay fault"], masks)["aligned"]
+
+    torch.testing.assert_close(aligned["metrics"], embeddings["metrics"])
+    torch.testing.assert_close(aligned["logs"], embeddings["logs"])
+
+
 def test_semantic_alignment_does_not_perturb_single_modality_samples():
     module = SemanticAlignmentModule(
         hidden_dim=16,

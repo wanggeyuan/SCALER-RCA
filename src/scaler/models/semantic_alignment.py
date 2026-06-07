@@ -113,9 +113,23 @@ class SemanticAlignmentModule(nn.Module):
         self.anchor_gates = nn.ModuleDict(
             {name: nn.Sequential(nn.Linear(hidden_dim * 2, hidden_dim), nn.Sigmoid()) for name in ("metrics", "logs", "traces")}
         )
+        self.residual_projections = nn.ModuleDict(
+            {
+                name: nn.Sequential(
+                    nn.Linear(hidden_dim, hidden_dim),
+                    nn.ReLU(),
+                    nn.Dropout(dropout),
+                    nn.Linear(hidden_dim, hidden_dim),
+                )
+                for name in ("metrics", "logs", "traces")
+            }
+        )
+        for projection in self.residual_projections.values():
+            nn.init.zeros_(projection[-1].weight)
+            nn.init.zeros_(projection[-1].bias)
         self.anchor_attention = nn.MultiheadAttention(embed_dim=hidden_dim, num_heads=4, batch_first=True, dropout=dropout)
         self.cross_modal_attention = nn.MultiheadAttention(embed_dim=hidden_dim, num_heads=8, batch_first=True, dropout=dropout)
-        self.residual_logit = nn.Parameter(torch.tensor(-2.0))
+        self.residual_logit = nn.Parameter(torch.tensor(-4.0))
         self.consistency_head = nn.Sequential(
             nn.Linear(hidden_dim * 3, hidden_dim),
             nn.ReLU(),
@@ -152,7 +166,7 @@ class SemanticAlignmentModule(nn.Module):
         residual_scale = torch.sigmoid(self.residual_logit)
         for idx, name in enumerate(ordered_names):
             semantic_delta = pre_cross[name] + cross_modal[:, idx, :]
-            candidate = modality_embeddings[name] + residual_scale * semantic_delta
+            candidate = modality_embeddings[name] + residual_scale * self.residual_projections[name](semantic_delta)
             aligned[name] = torch.where(multi_modal.unsqueeze(-1), candidate, modality_embeddings[name])
             aligned[name] = aligned[name] * modality_masks[name].unsqueeze(-1)
 
