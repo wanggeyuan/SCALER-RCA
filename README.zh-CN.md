@@ -2,21 +2,23 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-这是 ICWS 论文 `SCALER: LLM-based Cross-Modal Alignment for Microservice Root Cause Analysis` 的开源仓库。
+SCALER-RCA 是一个面向 RCAEval 数据集的微服务根因定位项目。
 
-仓库内容只保留与终稿论文直接对应的实现：
+给定故障场景下的 metrics、logs 和 traces，SCALER 会对候选服务进行排序，输出最可能的根因服务。这个仓库包含从 RCAEval 数据准备、训练、评估到模块对比的完整运行流程。
+
+主要组件包括：
 
 - metrics、logs、traces 三种模态的编码器
 - 基于冻结文本锚点的语义对齐模块
 - 用于服务级排序的动态融合模块
 - 复杂度感知的课程学习模块
-- 主实验与消融实验脚本
+- 训练、评估和模块对比脚本
 
-基线复现代码、论文草稿、画图草稿、无关实验残留等内容均不包含在本仓库中。
+第三方基线、草稿文件、画图草稿和无关实验残留不包含在本仓库中。
 
-## 最终复现实验
+## 快速开始
 
-下面的命令用于复现本仓库最终 SCALER 实验结果。建议使用 CUDA GPU；CPU/MPS 可以跑通代码，但完整实验会慢很多。
+下面的命令可以跑完整的 SCALER 实验流程。建议使用 CUDA GPU；CPU/MPS 可以跑通代码，但完整实验会慢很多。
 
 1. 先准备 RCAEval 数据。
 
@@ -38,48 +40,48 @@
 ./run_scaler.sh smoke
 ```
 
-3. 运行最终 full 模型：
+3. 训练完整模型：
 
 ```bash
 ./run_scaler.sh train \
-  --config configs/experiments/final_full.yaml \
+  --config configs/experiments/scaler_full.yaml \
   --data-root ./data/rcaeval \
-  --output-dir outputs/final_ablation/full \
+  --output-dir outputs/scaler_run/full \
   --device cuda
 ```
 
-最终配置使用 seed 42、70/15/15 训练/验证/测试划分、batch size 16、最多 100 个 epoch、基于验证集 early stopping，并启用语义对齐、动态融合和课程学习。
+该配置使用 seed 42、70/15/15 训练/验证/测试划分、batch size 16、最多 100 个 epoch、基于验证集 early stopping，并启用语义对齐、动态融合和课程学习。
 
-4. 运行规定的三组消融：
+4. 运行模块对比实验：
 
 ```bash
 ./run_scaler.sh train \
-  --config configs/experiments/final_no_semantic_alignment.yaml \
+  --config configs/experiments/scaler_no_semantic_alignment.yaml \
   --data-root ./data/rcaeval \
-  --output-dir outputs/final_ablation/no_semantic_alignment \
+  --output-dir outputs/scaler_run/no_semantic_alignment \
   --device cuda
 
 ./run_scaler.sh train \
-  --config configs/experiments/final_no_dynamic_fusion.yaml \
+  --config configs/experiments/scaler_no_dynamic_fusion.yaml \
   --data-root ./data/rcaeval \
-  --output-dir outputs/final_ablation/no_dynamic_fusion \
+  --output-dir outputs/scaler_run/no_dynamic_fusion \
   --device cuda
 
 ./run_scaler.sh train \
-  --config configs/experiments/final_no_curriculum_learning.yaml \
+  --config configs/experiments/scaler_no_curriculum_learning.yaml \
   --data-root ./data/rcaeval \
-  --output-dir outputs/final_ablation/no_curriculum_learning \
+  --output-dir outputs/scaler_run/no_curriculum_learning \
   --device cuda
 ```
 
-5. 汇总最终指标：
+5. 汇总指标：
 
 ```bash
 python - <<'PY'
 import json
 from pathlib import Path
 
-root = Path("outputs/final_ablation")
+root = Path("outputs/scaler_run")
 variants = [
     "full",
     "no_semantic_alignment",
@@ -111,9 +113,9 @@ PY
 
 ```bash
 ./run_scaler.sh evaluate \
-  --checkpoint outputs/final_ablation/full/scaler.pt \
+  --checkpoint outputs/scaler_run/full/scaler.pt \
   --data-root ./data/rcaeval \
-  --output-dir outputs/final_eval/full \
+  --output-dir outputs/scaler_eval/full \
   --max-eval-batches 9999 \
   --device cuda
 ```
@@ -149,38 +151,38 @@ RCAEval 数据目录应满足以下结构：
 
 ## 云服务器运行方式
 
-完整实验建议在服务器上 clone 仓库、准备 RCAEval 数据，然后用后台方式运行上面的最终配置：
+完整实验建议在服务器上 clone 仓库、准备 RCAEval 数据，然后用后台方式运行上面的训练命令：
 
 ```bash
-mkdir -p outputs/final_ablation/full
+mkdir -p outputs/scaler_run/full
 nohup ./run_scaler.sh train \
-  --config configs/experiments/final_full.yaml \
+  --config configs/experiments/scaler_full.yaml \
   --data-root ./data/rcaeval \
-  --output-dir outputs/final_ablation/full \
-  --device cuda > outputs/final_ablation/full/nohup.log 2>&1 &
+  --output-dir outputs/scaler_run/full \
+  --device cuda > outputs/scaler_run/full/nohup.log 2>&1 &
 ```
 
 训练日志也会写入：
 
 ```bash
-outputs/final_ablation/full/train.log
+outputs/scaler_run/full/train.log
 ```
 
 可以用下面的命令实时查看进度：
 
 ```bash
-tail -f outputs/final_ablation/full/train.log
+tail -f outputs/scaler_run/full/train.log
 ```
 
 ## 仓库范围
 
 当前版本只关注：
 
-- SCALER 主实验
-- SCALER 消融实验
-- 与论文指标对应的自动化结果汇总
+- SCALER 完整模型训练
+- 模块对比实验
+- 自动化结果汇总
 
-不包含对比基线实验代码。
+不包含第三方基线对比代码。
 
 ## 说明
 

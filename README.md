@@ -2,21 +2,21 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-Official repository for the ICWS paper `SCALER: LLM-based Cross-Modal Alignment for Microservice Root Cause Analysis`.
+SCALER-RCA is a microservice root cause analysis project for RCAEval.
 
-This repository only keeps the code paths that map directly to the camera-ready paper:
+Given metrics, logs, and traces from a faulty microservice system, SCALER ranks the most likely root-cause services. The repository contains the training, evaluation, and comparison scripts needed to run the full workflow from raw RCAEval data to ranking metrics.
 
-- multi-modal encoders for metrics, logs, and traces
+The main components are:
+
+- metrics, logs, and traces encoders
 - semantic alignment with a frozen text anchor
 - dynamic fusion for service ranking
 - complexity-aware curriculum learning
-- main experiments and ablation experiments
+- training, evaluation, and module-comparison scripts
 
-Baseline re-implementations, paper drafts, plotting scratch files, and unrelated experiment artifacts are intentionally excluded.
+## Quick Start
 
-## Final Reproduction
-
-The commands below reproduce the final SCALER experiment used by this repository. A CUDA GPU is recommended; CPU/MPS can run the code but will be much slower.
+The commands below run the complete SCALER experiment. A CUDA GPU is recommended; CPU/MPS can run the code but will be much slower.
 
 1. Prepare RCAEval data.
 
@@ -38,48 +38,48 @@ If you do not have RCAEval data yet:
 ./run_scaler.sh smoke
 ```
 
-3. Run the final full model:
+3. Train the full model:
 
 ```bash
 ./run_scaler.sh train \
-  --config configs/experiments/final_full.yaml \
+  --config configs/experiments/scaler_full.yaml \
   --data-root ./data/rcaeval \
-  --output-dir outputs/final_ablation/full \
+  --output-dir outputs/scaler_run/full \
   --device cuda
 ```
 
-The final configuration uses seed 42, 70/15/15 train/validation/test split, batch size 16, up to 100 epochs, validation-based early stopping, semantic alignment, dynamic fusion, and curriculum learning.
+This configuration uses seed 42, a 70/15/15 train/validation/test split, batch size 16, up to 100 epochs, validation-based early stopping, semantic alignment, dynamic fusion, and curriculum learning.
 
-4. Run the required ablations:
+4. Run module-comparison experiments:
 
 ```bash
 ./run_scaler.sh train \
-  --config configs/experiments/final_no_semantic_alignment.yaml \
+  --config configs/experiments/scaler_no_semantic_alignment.yaml \
   --data-root ./data/rcaeval \
-  --output-dir outputs/final_ablation/no_semantic_alignment \
+  --output-dir outputs/scaler_run/no_semantic_alignment \
   --device cuda
 
 ./run_scaler.sh train \
-  --config configs/experiments/final_no_dynamic_fusion.yaml \
+  --config configs/experiments/scaler_no_dynamic_fusion.yaml \
   --data-root ./data/rcaeval \
-  --output-dir outputs/final_ablation/no_dynamic_fusion \
+  --output-dir outputs/scaler_run/no_dynamic_fusion \
   --device cuda
 
 ./run_scaler.sh train \
-  --config configs/experiments/final_no_curriculum_learning.yaml \
+  --config configs/experiments/scaler_no_curriculum_learning.yaml \
   --data-root ./data/rcaeval \
-  --output-dir outputs/final_ablation/no_curriculum_learning \
+  --output-dir outputs/scaler_run/no_curriculum_learning \
   --device cuda
 ```
 
-5. Summarize the final metrics:
+5. Summarize metrics:
 
 ```bash
 python - <<'PY'
 import json
 from pathlib import Path
 
-root = Path("outputs/final_ablation")
+root = Path("outputs/scaler_run")
 variants = [
     "full",
     "no_semantic_alignment",
@@ -111,9 +111,9 @@ PY
 
 ```bash
 ./run_scaler.sh evaluate \
-  --checkpoint outputs/final_ablation/full/scaler.pt \
+  --checkpoint outputs/scaler_run/full/scaler.pt \
   --data-root ./data/rcaeval \
-  --output-dir outputs/final_eval/full \
+  --output-dir outputs/scaler_eval/full \
   --max-eval-batches 9999 \
   --device cuda
 ```
@@ -149,38 +149,38 @@ The download script follows the same RE1/RE2/RE3 Zenodo assets used by the offic
 
 ## Running on a Cloud GPU
 
-For a full run, clone the repository on the server, prepare RCAEval data, and run the same final commands in the background:
+For a complete run, clone the repository on the server, prepare RCAEval data, and run the same commands in the background:
 
 ```bash
-mkdir -p outputs/final_ablation/full
+mkdir -p outputs/scaler_run/full
 nohup ./run_scaler.sh train \
-  --config configs/experiments/final_full.yaml \
+  --config configs/experiments/scaler_full.yaml \
   --data-root ./data/rcaeval \
-  --output-dir outputs/final_ablation/full \
-  --device cuda > outputs/final_ablation/full/nohup.log 2>&1 &
+  --output-dir outputs/scaler_run/full \
+  --device cuda > outputs/scaler_run/full/nohup.log 2>&1 &
 ```
 
 Training logs are also written to:
 
 ```bash
-outputs/final_ablation/full/train.log
+outputs/scaler_run/full/train.log
 ```
 
 You can monitor progress with:
 
 ```bash
-tail -f outputs/final_ablation/full/train.log
+tail -f outputs/scaler_run/full/train.log
 ```
 
 ## Scope
 
 This release focuses on:
 
-- SCALER main experiment
-- SCALER ablation experiments
-- automatic result summarization aligned with the paper metrics
+- SCALER full-model training
+- module-comparison experiments
+- automatic result summarization
 
-It does not include baseline comparison code.
+It does not include third-party baseline comparison code.
 
 ## Notes
 
