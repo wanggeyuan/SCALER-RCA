@@ -247,6 +247,24 @@ def test_semantic_alignment_preserves_modality_residual():
     torch.testing.assert_close(aligned["logs"], embeddings["logs"])
 
 
+def test_semantic_alignment_does_not_perturb_single_modality_samples():
+    module = SemanticAlignmentModule(
+        hidden_dim=16,
+        anchor_config=TextEncoderConfig(backend="hashed", max_tokens=8),
+        dropout=0.0,
+    )
+    module.eval()
+    embeddings = {"metrics": torch.randn(2, 16), "logs": torch.randn(2, 16)}
+    masks = {
+        "metrics": torch.ones(2, dtype=torch.long),
+        "logs": torch.tensor([0, 1], dtype=torch.long),
+    }
+
+    aligned = module(embeddings, ["cpu fault", "delay fault"], masks)["aligned"]
+
+    torch.testing.assert_close(aligned["metrics"][0], embeddings["metrics"][0])
+
+
 def test_service_candidate_mask_removes_invalid_classes():
     config = SCALERExperimentConfig(
         hidden_dim=16,

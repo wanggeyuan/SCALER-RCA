@@ -147,16 +147,20 @@ class SemanticAlignmentModule(nn.Module):
 
         stacked = torch.stack(list(pre_cross.values()), dim=1)
         missing = torch.stack([~modality_masks[name].bool() for name in ordered_names], dim=1)
+        multi_modal = (~missing).sum(dim=1) >= 2
         cross_modal, _ = self.cross_modal_attention(stacked, stacked, stacked, key_padding_mask=missing)
         residual_scale = torch.sigmoid(self.residual_logit)
         for idx, name in enumerate(ordered_names):
             semantic_delta = pre_cross[name] + cross_modal[:, idx, :]
-            aligned[name] = (modality_embeddings[name] + residual_scale * semantic_delta) * modality_masks[name].unsqueeze(-1)
+            candidate = modality_embeddings[name] + residual_scale * semantic_delta
+            aligned[name] = torch.where(multi_modal.unsqueeze(-1), candidate, modality_embeddings[name])
+            aligned[name] = aligned[name] * modality_masks[name].unsqueeze(-1)
 
         concat = []
         for name in ("metrics", "logs", "traces"):
             concat.append(aligned.get(name, torch.zeros_like(anchor)))
         consistency_score = torch.sigmoid(self.consistency_head(torch.cat(concat, dim=-1))).squeeze(-1)
+        consistency_score = torch.where(multi_modal, consistency_score, torch.ones_like(consistency_score))
 
         return {
             "anchor": anchor,
